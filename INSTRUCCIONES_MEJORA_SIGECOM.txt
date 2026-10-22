@@ -1,0 +1,40 @@
+SIGECOM - PAQUETE DE MEJORAS INTEGRADAS
+========================================
+
+Este ZIP contiene SOLO los archivos modificados, conservando sus rutas.
+Copie su contenido encima de la carpeta de su proyecto combustible-gam.
+
+ANTES DE COPIAR:
+1. Haga una copia de seguridad de su proyecto actual.
+2. NO ejecute migrate:fresh.
+3. Este paquete no incluye migraciones nuevas.
+
+DESPUES DE COPIAR:
+php artisan optimize:clear
+php artisan serve
+
+MEJORAS INCLUIDAS:
+- Base visual responsive del layout para PC/tablet/celular.
+- Vales: búsqueda por vale/placa/código/factura.
+- Filtros por origen y estado.
+- Selector 10/30/50/100 registros y paginación.
+- Vista móvil en tarjetas.
+- Botones con paleta coherente (verde, neutro; rojo solo peligro).
+- Acciones según estado del vale.
+- Emisión con ficha ampliada del vehículo.
+- Botones Emitir y Emitir e imprimir/PDF.
+- Al emitir e imprimir abre la vista de impresión; desde el diálogo del navegador se imprime o se guarda como PDF.
+- Policía: listados y detalle más ordenados, paginación 10/30/50/100 y cierre mediante ventana modal.
+- Reportes existentes: botones Excel y PDF/Imprimir.
+- Exportación Excel compatible (.xls) para consumo, vehículo y apertura.
+- Corrección del alcance conConsumo(): gasto/consumo real = GAMS COMPLETADO + Policía UTILIZADO.
+
+NO SE MODIFICO:
+- Numeración correlativa anual.
+- Migraciones/base de datos.
+- Lógica de reserva de números.
+- Auditoría existente.
+- Turnstile/Brevo.
+
+NOTA PDF:
+No se añadió una dependencia externa de PDF. La vista institucional usa el sistema de impresión del navegador, donde puede elegirse "Guardar como PDF". Esto evita instalar paquetes nuevos y mantiene la impresión funcionando.

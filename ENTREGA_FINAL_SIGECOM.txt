@@ -1,0 +1,34 @@
+SIGECOM - ENTREGA FINAL MEJORADA
+================================
+
+MEJORAS APLICADAS EN ESTA ENTREGA
+- Diseño institucional moderno con tres familias de color: verde oscuro, verde principal y blanco/gris.
+- Sidebar responsive: cerrado por defecto en móvil, apertura por menú, backdrop y cierre al seleccionar.
+- Componentes, formularios, tablas, botones, estados y paginación unificados.
+- Dashboard modernizado y orientado al trabajo diario.
+- El dashboard calcula consumo real únicamente con GAMS COMPLETADO y Policía UTILIZADO.
+- Emisión de vale simplificada: vehículo -> kilometraje -> apertura -> emitir/imprimir.
+- Datos de lote, rango, próximo número, período, estación y combustible visibles como automáticos.
+- GAMS y Policía separados visualmente en la consulta de vales.
+- Vista móvil mediante tarjetas para vales y vehículos.
+- Búsqueda rápida de vehículos.
+- Validación y normalización de código/placa de vehículo, duplicados y mensajes claros.
+- Mensajes de validación generales en español.
+- Protección de doble envío de formularios.
+- Middleware de roles para operaciones críticas (Administrador / Auxiliar / Operador / Usuario consulta).
+- Pantallas propias 403, 404 y 500.
+- Auditoría funcional para cambios futuros de maestros y operaciones críticas; datos sensibles redactados.
+- Auditoría restringida a Administrador.
+- Se conservan numeración anual, bloqueo transaccional, rangos/lotes, flujo de completar/anular y Policía.
+
+NO SE EJECUTÓ migrate:fresh NI SE MODIFICÓ/ELIMINÓ LA BASE DE DATOS.
+
+VERIFICACIONES REALIZADAS
+- 74 archivos PHP revisados con php -l: sin errores de sintaxis.
+- 71 vistas Blade compiladas con BladeCompiler: correctas.
+- Tabla de rutas de Laravel generada correctamente, sin nombres de ruta duplicados.
+- PHPUnit no pudo arrancar en el contenedor de revisión porque PHP carece de las extensiones DOM, mbstring y xmlwriter. Esto es una limitación del PHP del entorno de revisión; en XAMPP deben estar habilitadas para ejecutar la suite.
+
+IMPORTANTE
+Antes de reemplazar tu proyecto local, conserva una copia del proyecto y de la base PostgreSQL actual.
+No ejecutes php artisan migrate:fresh.

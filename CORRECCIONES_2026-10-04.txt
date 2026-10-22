@@ -1,0 +1,25 @@
+SIGECOM - CORRECCIONES 04/10/2026
+
+1. Corregido error 500 al abrir /vales-combustible/create.
+   Causa: la ruta dinámica /vales-combustible/{valeCombustible} estaba registrada antes de /create,
+   por lo que PostgreSQL recibía la palabra "create" como id BIGINT.
+   También se corrigió el mismo patrón preventivamente en Vehículos y Unidades.
+
+2. Corregida exportación de reportes a Excel.
+   Ya no se entrega una tabla HTML con extensión .xls. Se genera un archivo XLSX real cuando ZipArchive
+   está disponible, manteniendo números de vale como texto (ceros iniciales) y litros/precios/totales como
+   valores numéricos. Esto evita la interpretación incorrecta de puntos decimales en Excel en español.
+   Si ZipArchive no está disponible, se entrega CSV UTF-8 compatible con Excel.
+
+3. Corregida impresión/PDF de reportes.
+   Los filtros ya no aparecen al imprimir, se usa A4 horizontal, se elimina el scroll horizontal y la tabla
+   se adapta al ancho de la página.
+
+VERIFICACIÓN
+- Sintaxis PHP revisada en app/, routes/ y database/: sin errores.
+- Laravel route:list: 113 rutas cargadas correctamente.
+- Confirmado que vales-combustible/create y vehiculos/create aparecen antes de sus rutas dinámicas.
+- view:cache no puede ejecutarse en este entorno porque PHP no tiene la extensión DOMDocument; no es un
+  error de las vistas del proyecto.
+
+No se ejecutó migrate:fresh ni se modificaron/borraron datos de PostgreSQL.

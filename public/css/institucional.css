@@ -1,0 +1,31 @@
+:root{--institucional:#176b63;--institucional-oscuro:#124b48}
+dialog{border:1px solid #dce6e8;border-radius:.75rem;padding:1.5rem;max-width:min(560px,92vw);max-height:85vh;overflow:auto;box-shadow:0 16px 60px #173c3c33}dialog::backdrop{background:#173c3c88}.table th{white-space:nowrap;font-size:.85rem}.table td,.table th{padding:.85rem 1rem}[hidden]{display:none!important}
+body{background:#f3f6f8;color:#243746}
+.app-sidebar{background:#173c3c!important}
+.sidebar-brand{border-bottom:1px solid #ffffff20}
+.sidebar-menu .nav-link{white-space:normal;border-radius:.4rem;font-size:.9rem}
+.sidebar-menu .nav-link p{white-space:normal}
+.sidebar-menu .nav-link.active{background:var(--institucional)!important;color:#fff!important}
+.app-header{background:#fff;border-bottom:1px solid #e1e8ec}
+.app-content-header{padding-top:1.5rem;padding-bottom:1.5rem}
+.institucion{font-size:.68rem;letter-spacing:.1em;color:#60757b;margin-bottom:.4rem;font-weight:700}
+.card{border:1px solid #e1e8ec;border-radius:.7rem;box-shadow:0 3px 12px #173c3c05;margin-bottom:0}
+.card-header{background:transparent;border-bottom:1px solid #edf1f3;padding:1rem 1.25rem}
+.card-title{float:none;font-size:1rem;font-weight:600;margin-bottom:.25rem}
+.card-body{padding:1.25rem}
+.indicador{border-top:3px solid var(--institucional)}
+.valor-indicador{font-size:1.9rem;font-weight:700;line-height:1.25;letter-spacing:-.04em}
+.icono-indicador{font-size:1.3rem;color:var(--institucional)}
+.prototipo{background:#e3f1ed;color:#175b52;font-weight:600;padding:.5rem .7rem}
+.aviso-demo{background:#edf5f7;border-left:3px solid #438694;border-radius:.3rem;padding:.8rem 1rem;color:#3f626a;font-size:.875rem}
+.barra-fondo{height:.65rem;background:#edf2f3;border-radius:1rem;overflow:hidden}
+.barra-valor{height:100%;background:var(--institucional);border-radius:1rem}
+.icono-seccion{font-size:2rem;color:var(--institucional)}
+.enlace-seccion{display:flex;align-items:center;justify-content:space-between;height:100%;padding:1rem;background:#fff;border:1px solid #dce6e8;border-radius:.5rem;color:var(--institucional-oscuro);text-decoration:none}
+.enlace-seccion:hover,.enlace-seccion[aria-current]{background:#e3f1ed;border-color:var(--institucional)}
+.btn-primary{--bs-btn-bg:var(--institucional);--bs-btn-border-color:var(--institucional);--bs-btn-hover-bg:var(--institucional-oscuro);--bs-btn-hover-border-color:var(--institucional-oscuro)}
+.breadcrumb a{color:var(--institucional)}
+.form-label{font-size:.85rem;font-weight:600}
+a:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:3px solid #ce9b36;outline-offset:3px}
+section[id]{scroll-margin-top:1rem}
+@media(max-width:575.98px){.valor-indicador{font-size:1.65rem}.institucion{max-width:28rem}.breadcrumb{font-size:.75rem!important}.app-content-header{padding-top:1rem}}
