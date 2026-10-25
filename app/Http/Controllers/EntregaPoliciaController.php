@@ -225,21 +225,40 @@ class EntregaPoliciaController extends Controller
                 ]);
             }
 
-            $numeroDuplicado = ValeCombustible::whereBetween(
-                'numero_vale',
-                [$inicio, $fin]
-            )->exists();
+           $serie = NumeracionVale::bloquear(
+    (int) $lote->periodo->anio
+);
 
-            if ($numeroDuplicado) {
-                throw ValidationException::withMessages([
-                    'lote_vale_id' =>
-                        'Uno o más números de este lote ya están registrados.',
-                ]);
-            }
+/*
+|--------------------------------------------------------------------------
+| VERIFICAR NÚMEROS DUPLICADOS DENTRO DE LA SERIE ACTIVA
+|--------------------------------------------------------------------------
+|
+| Un mismo número puede existir en una serie anterior.
+| Por ejemplo:
+|
+| Serie 1 -> 000001
+| Serie 2 -> 000001
+|
+| Lo que no puede existir es el mismo número dos veces
+| dentro de la misma serie.
+|
+*/
 
-            $serie = NumeracionVale::bloquear(
-                (int) $lote->periodo->anio
-            );
+$numeroDuplicado = ValeCombustible::query()
+    ->where('serie_vale_id', $serie->id)
+    ->whereBetween(
+        'numero_vale',
+        [$inicio, $fin]
+    )
+    ->exists();
+
+if ($numeroDuplicado) {
+    throw ValidationException::withMessages([
+        'lote_vale_id' =>
+            'Uno o más números de este lote ya están registrados en la serie activa.',
+    ]);
+}
 
             $entrega = EntregaPolicia::create([
                 'lote_vale_id' => $lote->id,
@@ -271,45 +290,55 @@ class EntregaPoliciaController extends Controller
                     auth()->id(),
             ]);
 
-            for ($numero = $inicio; $numero <= $fin; $numero++) {
+$ahora = now();
+$bloque = [];
 
-                ValeCombustible::create([
-                    'numero_vale' =>
-                        sprintf('%06d', $numero),
+for ($numero = $inicio; $numero <= $fin; $numero++) {
 
-                    'anio' =>
-                        $lote->periodo->anio,
+$bloque[] = [
+    'serie_vale_id' => $serie->id,
+    'numero_vale' => $numero,
+    'anio' => $lote->periodo->anio,
+    'lote_vale_id' => $lote->id,
+    'periodo_id' => $lote->periodo_id,
+    'entrega_policia_id' => $entrega->id,
+    'usuario_id' => auth()->id(),
+    'apertura_programatica_id' =>
+        $datos['apertura_programatica_id'],
+    'estado' => 'ENTREGADO',
+    'created_at' => $ahora,
+    'updated_at' => $ahora,
+];
 
-                    'lote_vale_id' =>
-                        $lote->id,
-
-                    'periodo_id' =>
-                        $lote->periodo_id,
-
-                    'entrega_policia_id' =>
-                        $entrega->id,
-
-                    'usuario_id' =>
-                        auth()->id(),
-
-                    'apertura_programatica_id' =>
-                        $datos['apertura_programatica_id'],
-
-                    'estado' =>
-                        'ENTREGADO',
-                ]);
-            }
-
-          if ($fin > (int) $serie->ultimo_numero) {
-
-    DB::table('series_vales')
-        ->where('id', $serie->id)
-        ->update([
-            'ultimo_numero' => $fin,
-            'updated_at' => now(),
-        ]);
+    if (count($bloque) === 1000) {
+        DB::table('vales_combustible')->insert($bloque);
+        $bloque = [];
+    }
 }
 
+if (!empty($bloque)) {
+    DB::table('vales_combustible')->insert($bloque);
+}
+
+/*
+|--------------------------------------------------------------------------
+| ACTUALIZAR ÚLTIMO NÚMERO DE LA SERIE ACTIVA
+|--------------------------------------------------------------------------
+|
+| Después de entregar el lote a Policía, la serie debe continuar
+| desde el número final de ese lote.
+|
+*/
+
+DB::table('series_vales')
+    ->where('id', $serie->id)
+    ->update([
+        'ultimo_numero' => max(
+            (int) $serie->ultimo_numero,
+            (int) $fin
+        ),
+        'updated_at' => now(),
+    ]);
             return $entrega;
 
         }, 3);

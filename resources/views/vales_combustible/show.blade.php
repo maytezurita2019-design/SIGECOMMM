@@ -357,21 +357,32 @@
 
                 <div>
 
-                    @if($valeCombustible->precio_unitario !== null)
+                 @if($valeCombustible->precio_unitario !== null)
 
-                        Bs {{ number_format(
-                            $valeCombustible->precio_unitario,
-                            4,
-                            ',',
-                            '.'
-                        ) }}
+    Bs {{
+        str_replace(
+            '.',
+            ',',
+            rtrim(
+                rtrim(
+                    number_format(
+                        (float) $valeCombustible->precio_unitario,
+                        4,
+                        '.',
+                        ''
+                    ),
+                    '0'
+                ),
+                '.'
+            )
+        )
+    }}
 
-                    @else
+@else
 
-                        Pendiente
+    Pendiente
 
-                    @endif
-
+@endif
                 </div>
 
             </div>

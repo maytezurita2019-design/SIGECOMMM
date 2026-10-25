@@ -218,40 +218,44 @@
                 </div>
 
 
-                {{-- FECHA DESDE --}}
+{{-- FECHA DESDE --}}
 
-                <div class="col-md-6 col-lg-3">
+<div class="col-md-6 col-lg-3">
 
-                    <label class="form-label audit-label">
-                        Fecha desde
-                    </label>
+    <label for="fecha_desde" class="form-label audit-label">
+        Fecha desde
+    </label>
 
-                    <input
-                        type="date"
-                        name="fecha_desde"
-                        value="{{ request('fecha_desde') }}"
-                        class="form-control"
-                    >
+    <input
+        id="fecha_desde"
+        type="date"
+        name="fecha_desde"
+        value="{{ request('fecha_desde') }}"
+        class="form-control audit-date-input"
+        max="{{ now()->format('Y-m-d') }}"
+    >
 
-                </div>
+</div>
 
 
-                {{-- FECHA HASTA --}}
+{{-- FECHA HASTA --}}
 
-                <div class="col-md-6 col-lg-3">
+<div class="col-md-6 col-lg-3">
 
-                    <label class="form-label audit-label">
-                        Fecha hasta
-                    </label>
+    <label for="fecha_hasta" class="form-label audit-label">
+        Fecha hasta
+    </label>
 
-                    <input
-                        type="date"
-                        name="fecha_hasta"
-                        value="{{ request('fecha_hasta') }}"
-                        class="form-control"
-                    >
+    <input
+        id="fecha_hasta"
+        type="date"
+        name="fecha_hasta"
+        value="{{ request('fecha_hasta') }}"
+        class="form-control audit-date-input"
+        max="{{ now()->format('Y-m-d') }}"
+    >
 
-                </div>
+</div>
 
 
                 {{-- LIMPIAR --}}
@@ -341,6 +345,25 @@
 
                         $accion =
                             strtoupper($a->accion ?? '');
+                            $etiquetasCampos = [
+    'periodo_id' => 'Período',
+    'serie_vale_id' => 'Serie',
+    'lote_vale_id' => 'Lote de vales',
+    'unidad_id' => 'Unidad',
+    'tipo_combustible_id' => 'Tipo de combustible',
+    'fuente_financiamiento_id' => 'Fuente de financiamiento',
+    'organismo_financiador_id' => 'Organismo financiador',
+    'apertura_programatica_id' => 'Apertura programática',
+    'vehiculo_id' => 'Vehículo',
+    'usuario_id' => 'Usuario',
+    'rol_id' => 'Rol',
+    'numero_inicial' => 'Número inicial',
+    'numero_final' => 'Número final',
+    'numero_vale' => 'Número de vale',
+    'fecha_recepcion' => 'Fecha de recepción',
+    'fecha_entrega' => 'Fecha de entrega',
+    'created_at' => 'Fecha de creación',
+];
 
                         $badgeClass =
                             match (true) {
@@ -557,441 +580,7 @@
                     </tr>
 
 
-                    {{-- =================================================
-                         MODAL
-                    ================================================= --}}
-
-                    <div
-                        class="modal fade"
-                        id="{{ $modalId }}"
-                        tabindex="-1"
-                        aria-hidden="true"
-                    >
-
-                        <div class="modal-dialog modal-lg modal-dialog-scrollable">
-
-                            <div class="modal-content audit-modal">
-
-
-                                {{-- HEADER --}}
-
-                                <div class="modal-header">
-
-                                    <div>
-
-                                        <div class="audit-modal-small">
-                                            DETALLE DE AUDITORÍA
-                                        </div>
-
-                                        <h5 class="modal-title">
-                                            Movimiento #{{ $a->id }}
-                                        </h5>
-
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        class="btn-close"
-                                        data-bs-dismiss="modal"
-                                        aria-label="Cerrar"
-                                    ></button>
-
-                                </div>
-
-
-                                <div class="modal-body">
-
-
-                                    {{-- RESUMEN --}}
-
-                                    <div class="row g-3 mb-4">
-
-
-                                        <div class="col-md-6">
-
-                                            <div class="audit-info-box">
-
-                                                <span>
-                                                    Usuario
-                                                </span>
-
-                                                <strong>
-                                                    {{ $nombreUsuario }}
-                                                </strong>
-
-                                                <small>
-                                                    {{ $rolUsuario }}
-                                                </small>
-
-                                            </div>
-
-                                        </div>
-
-
-                                        <div class="col-md-6">
-
-                                            <div class="audit-info-box">
-
-                                                <span>
-                                                    Fecha y hora
-                                                </span>
-
-                                                <strong>
-                                                    {{ $a->created_at?->format(
-                                                        'd/m/Y H:i:s'
-                                                    ) }}
-                                                </strong>
-
-                                            </div>
-
-                                        </div>
-
-
-                                        <div class="col-md-4">
-
-                                            <div class="audit-info-box">
-
-                                                <span>
-                                                    Acción
-                                                </span>
-
-                                                <strong>
-                                                    {{ $accion ?: '—' }}
-                                                </strong>
-
-                                            </div>
-
-                                        </div>
-
-
-                                        <div class="col-md-4">
-
-                                            <div class="audit-info-box">
-
-                                                <span>
-                                                    Módulo
-                                                </span>
-
-                                                <strong>
-                                                    {{ $modulo }}
-                                                </strong>
-
-                                            </div>
-
-                                        </div>
-
-
-                                        <div class="col-md-4">
-
-                                            <div class="audit-info-box">
-
-                                                <span>
-                                                    Registro
-                                                </span>
-
-                                                <strong>
-
-                                                    {{ $a->registro_id
-                                                        ? '#' . $a->registro_id
-                                                        : '—'
-                                                    }}
-
-                                                </strong>
-
-                                            </div>
-
-                                        </div>
-
-                                    </div>
-
-
-                                    {{-- DESCRIPCIÓN --}}
-
-                                    <div class="audit-modal-section">
-
-                                        <h6>
-                                            <i class="bi bi-card-text me-2"></i>
-                                            Descripción
-                                        </h6>
-
-                                        <div class="audit-description-box">
-
-                                            {{ $a->descripcion
-                                                ?: 'No se registró una descripción adicional.'
-                                            }}
-
-                                        </div>
-
-                                    </div>
-
-
-                                    {{-- CAMBIOS --}}
-
-                                    @if(
-                                        !empty($a->datos_anteriores)
-                                        || !empty($a->datos_nuevos)
-                                    )
-
-                                        <div class="audit-modal-section">
-
-                                            <h6>
-                                                <i class="bi bi-arrow-left-right me-2"></i>
-                                                Cambios registrados
-                                            </h6>
-
-
-                                            <div class="row g-3">
-
-
-                                                {{-- ANTES --}}
-
-                                                <div class="col-md-6">
-
-                                                    <div class="audit-change audit-before">
-
-                                                        <div class="audit-change-title">
-
-                                                            <i class="bi bi-clock-history"></i>
-
-                                                            Antes
-
-                                                        </div>
-
-
-                                                        @if(!empty($a->datos_anteriores))
-
-                                                            <div class="table-responsive">
-
-                                                                <table class="table table-sm mb-0">
-
-                                                                    <tbody>
-
-                                                                        @foreach(
-                                                                            $a->datos_anteriores
-                                                                            as $campo => $valor
-                                                                        )
-
-                                                                            <tr>
-
-                                                                                <td class="audit-field">
-                                                                                    {{ ucfirst(
-                                                                                        str_replace(
-                                                                                            '_',
-                                                                                            ' ',
-                                                                                            $campo
-                                                                                        )
-                                                                                    ) }}
-                                                                                </td>
-
-                                                                                <td>
-
-                                                                                    @if(is_array($valor))
-
-                                                                                        {{ json_encode(
-                                                                                            $valor,
-                                                                                            JSON_UNESCAPED_UNICODE
-                                                                                        ) }}
-
-                                                                                    @elseif(is_bool($valor))
-
-                                                                                        {{ $valor
-                                                                                            ? 'Sí'
-                                                                                            : 'No'
-                                                                                        }}
-
-                                                                                    @else
-
-                                                                                        {{ $valor === null
-                                                                                            || $valor === ''
-                                                                                            ? '—'
-                                                                                            : $valor
-                                                                                        }}
-
-                                                                                    @endif
-
-                                                                                </td>
-
-                                                                            </tr>
-
-                                                                        @endforeach
-
-                                                                    </tbody>
-
-                                                                </table>
-
-                                                            </div>
-
-                                                        @else
-
-                                                            <div class="audit-no-data">
-                                                                Sin datos anteriores.
-                                                            </div>
-
-                                                        @endif
-
-                                                    </div>
-
-                                                </div>
-
-
-                                                {{-- DESPUÉS --}}
-
-                                                <div class="col-md-6">
-
-                                                    <div class="audit-change audit-after">
-
-                                                        <div class="audit-change-title">
-
-                                                            <i class="bi bi-check-circle"></i>
-
-                                                            Después
-
-                                                        </div>
-
-
-                                                        @if(!empty($a->datos_nuevos))
-
-                                                            <div class="table-responsive">
-
-                                                                <table class="table table-sm mb-0">
-
-                                                                    <tbody>
-
-                                                                        @foreach(
-                                                                            $a->datos_nuevos
-                                                                            as $campo => $valor
-                                                                        )
-
-                                                                            <tr>
-
-                                                                                <td class="audit-field">
-                                                                                    {{ ucfirst(
-                                                                                        str_replace(
-                                                                                            '_',
-                                                                                            ' ',
-                                                                                            $campo
-                                                                                        )
-                                                                                    ) }}
-                                                                                </td>
-
-                                                                                <td>
-
-                                                                                    @if(is_array($valor))
-
-                                                                                        {{ json_encode(
-                                                                                            $valor,
-                                                                                            JSON_UNESCAPED_UNICODE
-                                                                                        ) }}
-
-                                                                                    @elseif(is_bool($valor))
-
-                                                                                        {{ $valor
-                                                                                            ? 'Sí'
-                                                                                            : 'No'
-                                                                                        }}
-
-                                                                                    @else
-
-                                                                                        {{ $valor === null
-                                                                                            || $valor === ''
-                                                                                            ? '—'
-                                                                                            : $valor
-                                                                                        }}
-
-                                                                                    @endif
-
-                                                                                </td>
-
-                                                                            </tr>
-
-                                                                        @endforeach
-
-                                                                    </tbody>
-
-                                                                </table>
-
-                                                            </div>
-
-                                                        @else
-
-                                                            <div class="audit-no-data">
-                                                                Sin datos nuevos.
-                                                            </div>
-
-                                                        @endif
-
-                                                    </div>
-
-                                                </div>
-
-                                            </div>
-
-                                        </div>
-
-                                    @endif
-
-
-                                    {{-- INFORMACIÓN TÉCNICA --}}
-
-                                    <div class="audit-modal-section mb-0">
-
-                                        <h6>
-                                            <i class="bi bi-pc-display me-2"></i>
-                                            Información técnica
-                                        </h6>
-
-                                        <div class="audit-technical">
-
-                                            <div>
-
-                                                <span>
-                                                    Dirección IP
-                                                </span>
-
-                                                <strong>
-                                                    {{ $a->ip ?: 'No registrada' }}
-                                                </strong>
-
-                                            </div>
-
-
-                                            <div>
-
-                                                <span>
-                                                    ID de auditoría
-                                                </span>
-
-                                                <strong>
-                                                    #{{ $a->id }}
-                                                </strong>
-
-                                            </div>
-
-                                        </div>
-
-                                    </div>
-
-                                </div>
-
-
-                                <div class="modal-footer">
-
-                                    <button
-                                        type="button"
-                                        class="btn btn-secondary"
-                                        data-bs-dismiss="modal"
-                                    >
-                                        Cerrar
-                                    </button>
-
-                                </div>
-
-                            </div>
-
-                        </div>
-
-                    </div>
-
+                   
                 @empty
 
                     <tr>
@@ -1028,6 +617,385 @@
     </div>
 
 </div>
+
+
+        </table>
+
+    </div>
+
+</div>
+
+
+{{-- =========================================================
+     MODALES DE AUDITORÍA
+========================================================= --}}
+
+@foreach($auditorias as $a)
+
+@php
+    $accionModal = strtoupper($a->accion ?? '');
+
+    $nombreUsuarioModal = $a->usuario
+        ? trim($a->usuario->nombre . ' ' . $a->usuario->apellido)
+        : 'Sistema';
+
+    $rolUsuarioModal = $a->usuario?->rol?->nombre ?? 'Sistema';
+
+    $moduloModal = ucfirst(
+        str_replace('_', ' ', $a->tabla ?? '—')
+    );
+
+    $modalId = 'auditoriaDetalle' . $a->id;
+
+    $etiquetasCampos = [
+        'periodo_id' => 'Período',
+        'serie_vale_id' => 'Serie',
+        'lote_vale_id' => 'Lote de vales',
+        'unidad_id' => 'Unidad',
+        'tipo_combustible_id' => 'Tipo de combustible',
+        'fuente_financiamiento_id' => 'Fuente de financiamiento',
+        'organismo_financiador_id' => 'Organismo financiador',
+        'apertura_programatica_id' => 'Apertura programática',
+        'vehiculo_id' => 'Vehículo',
+        'usuario_id' => 'Usuario',
+        'rol_id' => 'Rol',
+        'numero_inicial' => 'Número inicial',
+        'numero_final' => 'Número final',
+        'numero_vale' => 'Número de vale',
+        'fecha_recepcion' => 'Fecha de recepción',
+        'fecha_entrega' => 'Fecha de entrega',
+        'created_at' => 'Fecha de creación',
+        'updated_at' => 'Fecha de actualización',
+        'estado' => 'Estado',
+    ];
+@endphp
+
+<div
+    class="modal fade"
+    id="{{ $modalId }}"
+    tabindex="-1"
+    aria-labelledby="{{ $modalId }}Label"
+    aria-hidden="true"
+>
+    <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+
+        <div class="modal-content audit-modal">
+
+            {{-- ENCABEZADO --}}
+            <div class="modal-header">
+
+                <div>
+                    <div class="audit-modal-small">
+                        DETALLE DE AUDITORÍA
+                    </div>
+
+                    <h5
+                        class="modal-title"
+                        id="{{ $modalId }}Label"
+                    >
+                        Movimiento #{{ $a->id }}
+                    </h5>
+                </div>
+
+                <button
+                    type="button"
+                    class="btn-close"
+                    data-bs-dismiss="modal"
+                    aria-label="Cerrar"
+                ></button>
+
+            </div>
+
+            <div class="modal-body">
+
+                {{-- RESUMEN --}}
+                <div class="row g-3 mb-4">
+
+                    <div class="col-md-6">
+                        <div class="audit-info-box">
+
+                            <span>Usuario</span>
+
+                            <strong>
+                                {{ $nombreUsuarioModal }}
+                            </strong>
+
+                            <small>
+                                {{ $rolUsuarioModal }}
+                            </small>
+
+                        </div>
+                    </div>
+
+                    <div class="col-md-6">
+                        <div class="audit-info-box">
+
+                            <span>Fecha y hora</span>
+
+                            <strong>
+                                {{ $a->created_at?->format('d/m/Y H:i:s') }}
+                            </strong>
+
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="audit-info-box">
+
+                            <span>Acción</span>
+
+                            <strong>
+                                {{ $accionModal ?: '—' }}
+                            </strong>
+
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="audit-info-box">
+
+                            <span>Módulo</span>
+
+                            <strong>
+                                {{ $moduloModal }}
+                            </strong>
+
+                        </div>
+                    </div>
+
+                    <div class="col-md-4">
+                        <div class="audit-info-box">
+
+                            <span>Registro</span>
+
+                            <strong>
+                                {{ $a->registro_id ? '#' . $a->registro_id : '—' }}
+                            </strong>
+
+                        </div>
+                    </div>
+
+                </div>
+
+                {{-- DESCRIPCIÓN --}}
+                <div class="audit-modal-section">
+
+                    <h6>
+                        <i class="bi bi-card-text me-2"></i>
+                        Descripción
+                    </h6>
+
+                    <div class="audit-description-box">
+                        {{ $a->descripcion ?: 'No se registró una descripción adicional.' }}
+                    </div>
+
+                </div>
+
+                {{-- CAMBIOS --}}
+                @if(!empty($a->datos_anteriores) || !empty($a->datos_nuevos))
+
+                    <div class="audit-modal-section">
+
+                        <h6>
+                            <i class="bi bi-arrow-left-right me-2"></i>
+                            Cambios registrados
+                        </h6>
+
+                        <div class="row g-3">
+
+                            {{-- ANTES --}}
+                            <div class="col-md-6">
+
+                                <div class="audit-change audit-before">
+
+                                    <div class="audit-change-title">
+                                        <i class="bi bi-clock-history me-1"></i>
+                                        Antes
+                                    </div>
+
+                                    @if(!empty($a->datos_anteriores))
+
+                                        <div class="table-responsive">
+
+                                            <table class="table table-sm mb-0">
+                                                <tbody>
+
+                                                @foreach($a->datos_anteriores as $campo => $valor)
+
+                                                    <tr>
+
+                                                        <td class="audit-field">
+                                                            {{ $etiquetasCampos[$campo]
+                                                                ?? ucfirst(str_replace('_', ' ', $campo)) }}
+                                                        </td>
+
+                                                        <td>
+                                                            @if(is_array($valor))
+
+                                                                {{ json_encode(
+                                                                    $valor,
+                                                                    JSON_UNESCAPED_UNICODE
+                                                                ) }}
+
+                                                            @elseif(is_bool($valor))
+
+                                                                {{ $valor ? 'Sí' : 'No' }}
+
+                                                            @else
+
+                                                                {{ $valor === null || $valor === ''
+                                                                    ? '—'
+                                                                    : $valor }}
+
+                                                            @endif
+                                                        </td>
+
+                                                    </tr>
+
+                                                @endforeach
+
+                                                </tbody>
+                                            </table>
+
+                                        </div>
+
+                                    @else
+
+                                        <div class="audit-no-data">
+                                            Sin datos anteriores.
+                                        </div>
+
+                                    @endif
+
+                                </div>
+
+                            </div>
+
+                            {{-- DESPUÉS --}}
+                            <div class="col-md-6">
+
+                                <div class="audit-change audit-after">
+
+                                    <div class="audit-change-title">
+                                        <i class="bi bi-check-circle me-1"></i>
+                                        Después
+                                    </div>
+
+                                    @if(!empty($a->datos_nuevos))
+
+                                        <div class="table-responsive">
+
+                                            <table class="table table-sm mb-0">
+                                                <tbody>
+
+                                                @foreach($a->datos_nuevos as $campo => $valor)
+
+                                                    <tr>
+
+                                                        <td class="audit-field">
+                                                            {{ $etiquetasCampos[$campo]
+                                                                ?? ucfirst(str_replace('_', ' ', $campo)) }}
+                                                        </td>
+
+                                                        <td>
+                                                            @if(is_array($valor))
+
+                                                                {{ json_encode(
+                                                                    $valor,
+                                                                    JSON_UNESCAPED_UNICODE
+                                                                ) }}
+
+                                                            @elseif(is_bool($valor))
+
+                                                                {{ $valor ? 'Sí' : 'No' }}
+
+                                                            @else
+
+                                                                {{ $valor === null || $valor === ''
+                                                                    ? '—'
+                                                                    : $valor }}
+
+                                                            @endif
+                                                        </td>
+
+                                                    </tr>
+
+                                                @endforeach
+
+                                                </tbody>
+                                            </table>
+
+                                        </div>
+
+                                    @else
+
+                                        <div class="audit-no-data">
+                                            Sin datos nuevos.
+                                        </div>
+
+                                    @endif
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                @endif
+
+                {{-- INFORMACIÓN TÉCNICA --}}
+                <div class="audit-modal-section mb-0">
+
+                    <h6>
+                        <i class="bi bi-pc-display me-2"></i>
+                        Información técnica
+                    </h6>
+
+                    <div class="audit-technical">
+
+                        <div>
+                            <span>Dirección IP</span>
+
+                            <strong>
+                                {{ $a->ip ?: 'No registrada' }}
+                            </strong>
+                        </div>
+
+                        <div>
+                            <span>ID de auditoría</span>
+
+                            <strong>
+                                #{{ $a->id }}
+                            </strong>
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="modal-footer">
+
+                <button
+                    type="button"
+                    class="btn btn-secondary"
+                    data-bs-dismiss="modal"
+                >
+                    <i class="bi bi-x-lg me-1"></i>
+                    Cerrar
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+@endforeach
 
 
 {{-- PAGINACIÓN --}}
@@ -1428,8 +1396,47 @@
         .audit-technical > div {
             margin-bottom: 7px;
         }
+        .audit-date-input {
+    min-height: 38px;
+    cursor: pointer;
+    background-color: #fff;
+}
+
+.audit-date-input:focus {
+    border-color: #198754;
+    box-shadow: 0 0 0 .2rem rgba(25, 135, 84, .12);
+}
+
+.audit-date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+}
     }
 
 </style>
 
+@endpush
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+
+    const fechas = document.querySelectorAll('.audit-date-input');
+
+    fechas.forEach(function (input) {
+
+        input.addEventListener('click', function () {
+
+            if (typeof this.showPicker === 'function') {
+                try {
+                    this.showPicker();
+                } catch (error) {
+                    // El navegador usará su selector de fecha normal.
+                }
+            }
+
+        });
+
+    });
+
+});
+</script>
 @endpush

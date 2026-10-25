@@ -222,13 +222,9 @@
             Registrar entrega
         </button>
 
-        <a
-            href="{{ route('entregas-policia.index') }}"
-            class="btn btn-secondary"
-        >
-            Volver
-        </a>
-
+ <a href="{{ route('lotes-vales.index') }}" class="btn btn-secondary">
+    Volver
+</a>
     </div>
 
 </form>

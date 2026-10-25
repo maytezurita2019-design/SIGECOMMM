@@ -2,7 +2,6 @@
 
 @section('title', 'Usuarios')
 
-
 @push('styles')
 
 <style>
@@ -17,9 +16,6 @@
         border-collapse: collapse;
     }
 
-
-    /* DIVISIONES DE LAS CELDAS */
-
     .tabla-usuarios th,
     .tabla-usuarios td {
         border: 1px solid #d6e2da !important;
@@ -27,33 +23,19 @@
         vertical-align: middle;
     }
 
-
-    /* ENCABEZADO VERDE CLARO */
-
     .tabla-usuarios thead th {
         background-color: #eaf7ee !important;
         color: #174c2b;
         font-weight: 700;
     }
 
-
-    /* FILAS */
-
     .tabla-usuarios tbody td {
         background-color: #ffffff;
     }
 
-
-    /* AL PASAR EL MOUSE */
-
     .tabla-usuarios tbody tr:hover td {
         background-color: #f3faf5;
     }
-
-
-    /* ==========================================
-       ANCHO DE LAS 7 COLUMNAS
-    ========================================== */
 
     /* ID */
     .tabla-usuarios th:nth-child(1),
@@ -64,25 +46,25 @@
     /* Nombre */
     .tabla-usuarios th:nth-child(2),
     .tabla-usuarios td:nth-child(2) {
-        width: 19%;
+        width: 20%;
     }
 
-    /* CI */
+    /* Teléfono */
     .tabla-usuarios th:nth-child(3),
     .tabla-usuarios td:nth-child(3) {
-        width: 11%;
+        width: 13%;
     }
 
     /* Correo */
     .tabla-usuarios th:nth-child(4),
     .tabla-usuarios td:nth-child(4) {
-        width: 22%;
+        width: 20%;
     }
 
     /* Rol */
     .tabla-usuarios th:nth-child(5),
     .tabla-usuarios td:nth-child(5) {
-        width: 13%;
+        width: 14%;
     }
 
     /* Estado */
@@ -95,7 +77,7 @@
     /* Acciones */
     .tabla-usuarios th:nth-child(7),
     .tabla-usuarios td:nth-child(7) {
-        width: 20%;
+        width: 18%;
         text-align: center;
     }
 
@@ -109,7 +91,6 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
 
     <div>
-
         <h2 class="mb-1">
             Usuarios
         </h2>
@@ -117,9 +98,7 @@
         <p class="text-muted mb-0">
             Administración de usuarios del sistema
         </p>
-
     </div>
-
 
     <a href="{{ route('usuarios.create') }}"
        class="btn btn-primary">
@@ -131,6 +110,29 @@
 
 </div>
 
+@if(session('success'))
+    <div class="alert alert-success alert-dismissible fade show">
+        <i class="bi bi-check-circle me-1"></i>
+        {{ session('success') }}
+
+        <button type="button"
+                class="btn-close"
+                data-bs-dismiss="alert">
+        </button>
+    </div>
+@endif
+
+@if(session('error'))
+    <div class="alert alert-danger alert-dismissible fade show">
+        <i class="bi bi-exclamation-triangle me-1"></i>
+        {{ session('error') }}
+
+        <button type="button"
+                class="btn-close"
+                data-bs-dismiss="alert">
+        </button>
+    </div>
+@endif
 
 <div class="card shadow-sm">
 
@@ -140,33 +142,19 @@
 
             <table class="table table-bordered table-hover align-middle tabla-usuarios">
 
-
-                <!-- ENCABEZADO -->
-
                 <thead>
 
                     <tr>
-
                         <th>ID</th>
-
                         <th>Nombre</th>
-
-                        <th>CI</th>
-
+                        <th>Teléfono</th>
                         <th>Correo</th>
-
                         <th>Rol</th>
-
                         <th>Estado</th>
-
                         <th>Acciones</th>
-
                     </tr>
 
                 </thead>
-
-
-                <!-- DATOS -->
 
                 <tbody>
 
@@ -174,49 +162,35 @@
 
                         <tr>
 
-
-                            <!-- ID -->
-
+                            {{-- ID --}}
                             <td>
                                 {{ $usuario->id }}
                             </td>
 
-
-                            <!-- NOMBRE -->
-
+                            {{-- NOMBRE --}}
                             <td>
-
                                 <strong>
                                     {{ $usuario->nombre }}
                                     {{ $usuario->apellido }}
                                 </strong>
-
                             </td>
 
-
-                            <!-- CI -->
-
+                            {{-- TELÉFONO --}}
                             <td>
-                                {{ $usuario->ci }}
+                                {{ $usuario->telefono ?? '-' }}
                             </td>
 
-
-                            <!-- CORREO -->
-
+                            {{-- CORREO --}}
                             <td>
                                 {{ $usuario->correo }}
                             </td>
 
-
-                            <!-- ROL -->
-
+                            {{-- ROL --}}
                             <td>
                                 {{ $usuario->rol->nombre ?? 'Sin rol' }}
                             </td>
 
-
-                            <!-- ESTADO -->
-
+                            {{-- ESTADO --}}
                             <td>
 
                                 @if($usuario->estado)
@@ -235,39 +209,52 @@
 
                             </td>
 
-
-                            <!-- ACCIONES -->
-
+                            {{-- ACCIONES --}}
                             <td>
 
                                 {{-- VER --}}
-                                <a
-                                    href="{{ route('usuarios.show', $usuario) }}"
-                                    class="btn btn-sm btn-info text-white"
-                                    title="Ver usuario">
+                                <a href="{{ route('usuarios.show', $usuario) }}"
+                                   class="btn btn-sm btn-info text-white"
+                                   title="Ver usuario">
 
                                     <i class="bi bi-eye"></i>
 
                                 </a>
 
-
                                 {{-- EDITAR --}}
-                                <a
-                                    href="{{ route('usuarios.edit', $usuario) }}"
-                                    class="btn btn-sm btn-warning"
-                                    title="Editar usuario">
+                                <a href="{{ route('usuarios.edit', $usuario) }}"
+                                   class="btn btn-sm btn-warning"
+                                   title="Editar usuario">
 
                                     <i class="bi bi-pencil"></i>
 
                                 </a>
 
+                               @if(auth()->id() !== $usuario->id)
 
-                              
+    <form action="{{ route('usuarios.destroy', $usuario) }}"
+          method="POST"
+          class="d-inline"
+          onsubmit="return confirm('¿Está seguro de eliminar este usuario?');">
+
+        @csrf
+        @method('DELETE')
+
+        <button type="submit"
+                class="btn btn-sm btn-danger"
+                title="Eliminar usuario">
+
+            <i class="bi bi-trash"></i>
+
+        </button>
+
+    </form>
+
+@endif
 
                             </td>
 
                         </tr>
-
 
                     @empty
 

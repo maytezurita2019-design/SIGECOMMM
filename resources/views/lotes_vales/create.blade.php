@@ -8,12 +8,6 @@
     {{ isset($loteVale) ? 'Editar lote de vales' : 'Nuevo lote de vales' }}
 </h2>
 
-<p class="text-muted">
-    Registre el rango de numeración de los vales recibidos.
-    La numeración continúa entre períodos de una misma gestión
-    y reinicia en 000001 al comenzar una nueva gestión.
-</p>
-
 @if($errors->any())
     <div class="alert alert-danger">
         <ul class="mb-0">
@@ -35,6 +29,12 @@
         >
 
             @csrf
+            <input
+    type="hidden"
+    name="iniciar_nueva_serie"
+    id="iniciar_nueva_serie"
+    value="0"
+>
 
             @isset($loteVale)
                 @method('PUT')
@@ -42,6 +42,43 @@
 
             <div class="row">
 
+                {{-- NÚMERO SUGERIDO --}}
+@if(!isset($loteVale))
+    <div class="col-12 mb-3">
+        <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap gap-2 mb-0">
+
+            <div>
+                <small class="d-block">
+                    Siguiente número sugerido
+                </small>
+
+                <strong style="font-size: 1.2rem;">
+                    N.º {{ str_pad($numeroSugerido, 6, '0', STR_PAD_LEFT) }}
+                </strong>
+
+                @if($ultimoNumero > 0)
+                    <small class="d-block text-muted mt-1">
+                        Último número utilizado:
+                        N.º {{ str_pad($ultimoNumero, 6, '0', STR_PAD_LEFT) }}
+                    </small>
+                @endif
+            </div>
+
+            <button
+                type="button"
+                id="usar-numero-sugerido"
+                class="btn btn-success"
+                data-numero="{{ $numeroSugerido }}"
+            >
+                <i class="bi bi-check-lg"></i>
+                Usar
+            </button>
+
+        </div>
+    </div>
+@endif
+
+                {{-- NÚMERO INICIAL --}}
                 <div class="col-md-6 mb-3">
                     <label for="numero_inicial" class="form-label">
                         Número inicial *
@@ -49,16 +86,36 @@
 
                     <input
                         id="numero_inicial"
-                        name="numero_inicial"
                         type="number"
+                        name="numero_inicial"
                         min="1"
-                        max="999999"
+                        step="1"
                         class="form-control"
                         value="{{ old('numero_inicial', $loteVale->numero_inicial ?? '') }}"
                         required
                     >
                 </div>
 
+                {{-- CANTIDAD --}}
+                <div class="col-md-6 mb-3">
+                    <label for="cantidad_vales" class="form-label">
+                        Cantidad de vales *
+                    </label>
+
+                    <input
+                        id="cantidad_vales"
+                        type="number"
+                        name="cantidad_vales"
+                        min="1"
+                        step="1"
+                        class="form-control"
+                        value="{{ old('cantidad_vales') }}"
+                        placeholder="Ej.: 200, 500, 8000"
+                        required
+                    >
+                </div>
+
+                {{-- NÚMERO FINAL --}}
                 <div class="col-md-6 mb-3">
                     <label for="numero_final" class="form-label">
                         Número final *
@@ -66,16 +123,22 @@
 
                     <input
                         id="numero_final"
-                        name="numero_final"
                         type="number"
+                        name="numero_final"
                         min="1"
-                        max="999999"
+                        step="1"
                         class="form-control"
                         value="{{ old('numero_final', $loteVale->numero_final ?? '') }}"
+                        readonly
                         required
                     >
+
+                    <small class="text-muted">
+                        Se calcula automáticamente según el número inicial y la cantidad.
+                    </small>
                 </div>
 
+                {{-- FECHA --}}
                 <div class="col-md-6 mb-3">
                     <label for="fecha_recepcion" class="form-label">
                         Fecha de recepción *
@@ -96,6 +159,7 @@
                     >
                 </div>
 
+                {{-- PERÍODO --}}
                 <div class="col-md-6 mb-3">
                     <label for="periodo_id" class="form-label">
                         Período *
@@ -131,54 +195,9 @@
                     </select>
                 </div>
 
-                <div class="col-md-6 mb-3">
-                    <label for="estado" class="form-label">
-                        Estado *
-                    </label>
-
-                    <select
-                        id="estado"
-                        name="estado"
-                        class="form-select"
-                        required
-                    >
-                        <option
-                            value="1"
-                            @selected(
-                                old('estado', $loteVale->estado ?? 1) == 1
-                            )
-                        >
-                            Activo
-                        </option>
-
-                        <option
-                            value="0"
-                            @selected(
-                                old('estado', $loteVale->estado ?? 1) == 0
-                            )
-                        >
-                            Inactivo
-                        </option>
-                    </select>
-                </div>
-
             </div>
 
-            <p
-                id="resumen-rango"
-                class="alert alert-info"
-                aria-live="polite"
-            >
-                Ingrese el rango de números.
-            </p>
-
-            <p class="text-muted">
-                No se permiten rangos superpuestos en un mismo año.
-                Después de emitir un vale, el rango y el período
-                del lote quedan fijos.
-            </p>
-
-            <button class="btn btn-primary">
+            <button type="submit" class="btn btn-primary">
                 Guardar
             </button>
 
@@ -195,25 +214,84 @@
 </div>
 
 <script>
-const inicio = document.getElementById('numero_inicial');
-const fin = document.getElementById('numero_final');
+document.addEventListener('DOMContentLoaded', function () {
 
-function resumenRango() {
-    const a = Number(inicio.value);
-    const b = Number(fin.value);
+    const inicio = document.getElementById('numero_inicial');
+    const cantidad = document.getElementById('cantidad_vales');
+    const fin = document.getElementById('numero_final');
+    const botonSugerido = document.getElementById('usar-numero-sugerido');
+    const nuevaSerie = document.getElementById('iniciar_nueva_serie');
 
-    document.getElementById('resumen-rango').textContent =
-        a > 0 && b >= a
-            ? `${b - a + 1} vales · del N.º ${String(a).padStart(6, '0')} al N.º ${String(b).padStart(6, '0')}`
-            : 'Ingrese un rango válido: el número final debe ser mayor o igual al inicial.';
+const numeroSugerido = @json($numeroSugerido ?? null);
 
-    fin.min = inicio.value || 1;
+if (botonSugerido) {
+    botonSugerido.addEventListener('click', function () {
+
+        inicio.value = this.dataset.numero;
+
+        inicio.dispatchEvent(new Event('input'));
+
+        inicio.focus();
+    });
 }
+    function calcularNumeroFinal() {
 
-inicio.addEventListener('input', resumenRango);
-fin.addEventListener('input', resumenRango);
+        const numeroInicial = parseInt(inicio.value, 10);
+        const cantidadVales = parseInt(cantidad.value, 10);
 
-resumenRango();
+        if (
+            Number.isInteger(numeroInicial) &&
+            numeroInicial >= 1 &&
+            Number.isInteger(cantidadVales) &&
+            cantidadVales >= 1
+        ) {
+            fin.value = numeroInicial + cantidadVales - 1;
+        } else {
+            fin.value = '';
+        }
+    }
+
+    inicio.addEventListener('input', calcularNumeroFinal);
+    cantidad.addEventListener('input', calcularNumeroFinal);
+
+    calcularNumeroFinal();
+
+    const formulario = inicio.closest('form');
+
+formulario.addEventListener('submit', function (event) {
+
+    const numeroInicial = parseInt(inicio.value, 10);
+    const sugerido = parseInt(numeroSugerido, 10);
+
+    nuevaSerie.value = '0';
+
+    if (
+        Number.isInteger(numeroInicial) &&
+        Number.isInteger(sugerido) &&
+        numeroInicial < sugerido
+    ) {
+
+        const confirmar = confirm(
+            'El número ingresado es menor al correlativo actual.\n\n' +
+            'Último número de la serie actual: N.º ' +
+            String(sugerido - 1).padStart(6, '0') +
+            '\n\n' +
+            'Nueva serie desde: N.º ' +
+            String(numeroInicial).padStart(6, '0') +
+            '\n\n' +
+            '¿Desea iniciar una nueva serie?'
+        );
+
+        if (!confirmar) {
+            event.preventDefault();
+            nuevaSerie.value = '0';
+            return;
+        }
+
+        nuevaSerie.value = '1';
+    }
+});
+});
 </script>
 
 @endsection

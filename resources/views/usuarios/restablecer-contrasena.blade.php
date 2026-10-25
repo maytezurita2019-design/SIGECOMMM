@@ -16,7 +16,7 @@
             </p>
         </div>
 
-        <a href="{{ route('usuarios.index') }}"
+        <a href="{{ route('solicitudes-contrasena.index') }}"
            class="btn btn-secondary">
             <i class="bi bi-arrow-left me-1"></i>
             Volver
@@ -89,7 +89,7 @@
 
                 <div class="d-flex justify-content-end gap-2">
 
-                    <a href="{{ route('usuarios.index') }}"
+                    <a href="{{route('solicitudes-contrasena.index') }}"
                        class="btn btn-secondary">
                         Cancelar
                     </a>

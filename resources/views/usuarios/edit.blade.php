@@ -47,13 +47,16 @@
                            required>
                 </div>
 
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">CI *</label>
 
-                    <input type="text"
-                           name="ci"
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Teléfono *</label>
+
+                    <input type="tel"
+                           name="telefono"
                            class="form-control"
-                           value="{{ old('ci', $usuario->ci) }}"
+                           value="{{ old('telefono', $usuario->telefono) }}"
+                           maxlength="20"
+                           placeholder="Ej.: 71234567"
                            required>
                 </div>
 
@@ -78,9 +81,7 @@
 
                             <option value="{{ $rol->id }}"
                                 {{ old('rol_id', $usuario->rol_id) == $rol->id ? 'selected' : '' }}>
-
                                 {{ $rol->nombre }}
-
                             </option>
 
                         @endforeach
@@ -110,8 +111,40 @@
 
             </div>
 
+
+            <div class="col-md-6 mb-3">
+    <label class="form-label">
+        Nueva contraseña
+    </label>
+
+    <input type="password"
+           name="contrasena"
+           class="form-control"
+           autocomplete="new-password"
+           minlength="8"
+           placeholder="Ingrese la nueva contraseña">
+
+    <small class="text-muted">
+    
+    </small>
+</div>
+
+<div class="col-md-6 mb-3">
+    <label class="form-label">
+        Confirmar nueva contraseña
+    </label>
+
+    <input type="password"
+           name="contrasena_confirmation"
+           class="form-control"
+           autocomplete="new-password"
+           minlength="8"
+           placeholder="Repita la nueva contraseña">
+</div>
+
             <button type="submit"
                     class="btn btn-primary">
+                <i class="bi bi-save me-1"></i>
                 Actualizar
             </button>
 

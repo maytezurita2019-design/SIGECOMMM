@@ -15,12 +15,7 @@
         </p>
     </div>
 
-    <a
-        href="{{ route('lotes-vales.index') }}"
-        class="btn btn-secondary">
-        <i class="bi bi-arrow-left me-1"></i>
-        Volver
-    </a>
+
 </div>
 
 

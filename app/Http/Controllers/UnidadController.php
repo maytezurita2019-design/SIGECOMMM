@@ -7,12 +7,15 @@ use Illuminate\Http\Request;
 
 class UnidadController extends Controller
 {
-    public function index()
-    {
-        $unidades = Unidad::orderBy('nombre')->get();
+  public function index()
+{
+    $unidades = Unidad::orderBy('id', 'asc')->get();
 
-        return view('unidades.index', compact('unidades'));
-    }
+    return view(
+        'unidades.index',
+        compact('unidades')
+    );
+}
 
     public function create()
     {

@@ -11,9 +11,11 @@
     );
 @endphp
 
+
 <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap mb-4">
 
     <div>
+
         <div class="small text-success fw-bold text-uppercase">
             Parque automotor
         </div>
@@ -25,41 +27,76 @@
         <p class="page-subtitle mb-0">
             Consulta y administración del parque automotor institucional.
         </p>
+
     </div>
 
+
     @if($esAdmin)
+
         <a href="{{ route('vehiculos.create') }}"
            class="btn btn-success">
 
             <i class="bi bi-plus-circle me-1"></i>
             Nuevo vehículo
+
         </a>
+
     @endif
 
 </div>
 
 
-{{-- BUSCADOR --}}
+{{-- CONTROLES DE TABLA --}}
 <div class="card mb-3">
-    <div class="card-body">
+    <div class="card-body py-3">
 
-        <div class="input-group">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
 
-            <span class="input-group-text bg-white">
-                <i class="bi bi-search"></i>
-            </span>
+            {{-- MOSTRAR --}}
+            <div class="d-flex align-items-center gap-2">
 
-            <input
-                id="buscarVehiculo"
-                class="form-control"
-                placeholder="Buscar por código, placa, tipo, marca o unidad"
-                autocomplete="off">
+                <span class="small">
+                    Mostrar
+                </span>
+
+                <select id="cantidadVehiculos"
+                        class="form-select form-select-sm"
+                        style="width: 70px;">
+
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+
+                </select>
+
+                <span class="small">
+                    vehículos
+                </span>
+
+            </div>
+
+
+            {{-- BUSCADOR AUTOMÁTICO --}}
+            <div class="d-flex align-items-center gap-2">
+
+                <label for="buscarVehiculo"
+                       class="small mb-0">
+                    Buscador:
+                </label>
+
+                <input type="text"
+                       id="buscarVehiculo"
+                       class="form-control form-control-sm"
+                       style="width: 230px;"
+                       autocomplete="off">
+
+            </div>
 
         </div>
 
     </div>
 </div>
-
 
 {{-- TABLA --}}
 <div class="card">
@@ -67,9 +104,10 @@
     <div class="table-responsive">
 
         <table class="table table-hover align-middle mb-0 tabla-responsive-cards"
-               id="tablaVehiculos">
+       id="tablaVehiculos">
 
             <thead>
+
                 <tr>
                     <th>Código</th>
                     <th>Placa</th>
@@ -78,148 +116,169 @@
                     <th>Estado</th>
                     <th>Acciones</th>
                 </tr>
+
             </thead>
+
 
             <tbody>
 
-            @forelse($vehiculos as $vehiculo)
+                @forelse($vehiculos as $vehiculo)
 
-                <tr data-search="{{ mb_strtoupper(
-                    $vehiculo->codigo.' '.
-                    $vehiculo->placa.' '.
-                    $vehiculo->tipo.' '.
-                    $vehiculo->marca.' '.
-                    ($vehiculo->unidad->nombre ?? '')
-                ) }}">
+    <tr data-search="{{ mb_strtoupper(
+        $vehiculo->codigo . ' ' .
+        $vehiculo->placa . ' ' .
+        ($vehiculo->tipo ?? '') . ' ' .
+        ($vehiculo->marca ?? '') . ' ' .
+        ($vehiculo->unidad->nombre ?? '')
+    ) }}">
 
-                    <td data-label="Código">
-                        <strong>
-                            {{ $vehiculo->codigo }}
-                        </strong>
-                    </td>
+                        {{-- CÓDIGO --}}
+                        <td data-label="Código">
 
-                    <td data-label="Placa">
-                        <span class="fw-bold">
-                            {{ $vehiculo->placa }}
-                        </span>
-                    </td>
+                            <strong>
+                                {{ $vehiculo->codigo }}
+                            </strong>
 
-                    <td data-label="Tipo / Marca">
+                        </td>
 
-                        {{ $vehiculo->tipo ?: '—' }}
 
-                        @if($vehiculo->marca)
-                            <span class="text-muted">
-                                · {{ $vehiculo->marca }}
+                        {{-- PLACA --}}
+                        <td data-label="Placa">
+
+                            <span class="fw-bold">
+                                {{ $vehiculo->placa }}
                             </span>
-                        @endif
 
-                    </td>
-
-                    <td data-label="Unidad">
-                        {{ $vehiculo->unidad->nombre ?? 'Sin unidad' }}
-                    </td>
-
-                    <td data-label="Estado">
-
-                        <span class="badge border bg-light text-dark">
-
-                            <i class="bi {{ $vehiculo->estado
-                                ? 'bi-check-circle'
-                                : 'bi-pause-circle' }} me-1">
-                            </i>
-
-                            {{ $vehiculo->estado
-                                ? 'Activo'
-                                : 'Inactivo' }}
-
-                        </span>
-
-                    </td>
+                        </td>
 
 
-                    {{-- ACCIONES --}}
-                    <td data-label="Acciones">
+                        {{-- TIPO / MARCA --}}
+                        <td data-label="Tipo / Marca">
 
-                        <div class="d-flex gap-1 flex-nowrap align-items-center">
+                            {{ $vehiculo->tipo ?: '—' }}
 
-                            {{-- VER --}}
-                            <a href="{{ route('vehiculos.show', $vehiculo) }}"
-                               class="btn btn-sm btn-outline-success">
+                            @if($vehiculo->marca)
 
-                                <i class="bi bi-eye me-1"></i>
-                                Ver
-
-                            </a>
-
-
-                            @if($esAdmin)
-
-                                {{-- EDITAR --}}
-                                <a href="{{ route('vehiculos.edit', $vehiculo) }}"
-                                   class="btn btn-sm btn-outline-success">
-
-                                    <i class="bi bi-pencil me-1"></i>
-                                    Editar
-
-                                </a>
-
-
-                                {{-- ELIMINAR --}}
-                                <form
-                                    action="{{ route('vehiculos.destroy', $vehiculo) }}"
-                                    method="POST"
-                                    class="d-inline"
-                                    onsubmit="return confirm('¿Está seguro de eliminar este vehículo? Esta acción no se puede deshacer.');">
-
-                                    @csrf
-                                    @method('DELETE')
-
-                                    <button type="submit"
-                                            class="btn btn-sm btn-outline-danger">
-
-                                        <i class="bi bi-trash me-1"></i>
-                                        Eliminar
-
-                                    </button>
-
-                                </form>
+                                <span class="text-muted">
+                                    · {{ $vehiculo->marca }}
+                                </span>
 
                             @endif
 
+                        </td>
 
-                            {{-- REPORTE --}}
-                            <a href="{{ route(
-                                    'reportes.vehiculos',
-                                    ['vehiculo_id' => $vehiculo->id]
-                                ) }}"
-                               class="btn btn-sm btn-outline-secondary">
 
-                                <i class="bi bi-bar-chart me-1"></i>
-                                Reporte
+                        {{-- UNIDAD --}}
+                        <td data-label="Unidad">
 
-                            </a>
+                            {{ $vehiculo->unidad->nombre ?? 'Sin unidad' }}
 
-                        </div>
+                        </td>
 
-                    </td>
 
-                </tr>
+                        {{-- ESTADO --}}
+                        <td data-label="Estado">
 
-            @empty
+                            <span class="badge border bg-light text-dark">
 
-                <tr>
-                    <td colspan="6"
-                        class="text-center text-muted py-5">
+                                <i class="bi {{ $vehiculo->estado
+                                    ? 'bi-check-circle'
+                                    : 'bi-pause-circle' }} me-1">
+                                </i>
 
-                        <i class="bi bi-car-front fs-2 d-block mb-2"></i>
+                                {{ $vehiculo->estado
+                                    ? 'Activo'
+                                    : 'Inactivo' }}
 
-                        No hay vehículos registrados.
+                            </span>
 
-                    </td>
-                </tr>
+                        </td>
 
-            @endforelse
+
+                      {{-- ACCIONES --}}
+<td data-label="Acciones">
+
+    <div class="d-flex gap-1 flex-nowrap align-items-center acciones-vehiculo">
+
+        {{-- VER --}}
+        <a href="{{ route('vehiculos.show', $vehiculo) }}"
+           class="btn btn-sm btn-info text-white"
+           title="Ver vehículo">
+
+            <i class="bi bi-eye"></i>
+
+        </a>
+
+
+        @if($esAdmin)
+
+            {{-- EDITAR --}}
+            <a href="{{ route('vehiculos.edit', $vehiculo) }}"
+               class="btn btn-sm btn-warning text-dark"
+               title="Editar vehículo">
+
+                <i class="bi bi-pencil"></i>
+
+            </a>
+
+
+            {{-- ELIMINAR --}}
+            <form action="{{ route('vehiculos.destroy', $vehiculo) }}"
+                  method="POST"
+                  class="d-inline"
+                  onsubmit="return confirm('¿Está seguro de eliminar este vehículo?');">
+
+                @csrf
+                @method('DELETE')
+
+                <button type="submit"
+                        class="btn btn-sm btn-danger"
+                        title="Eliminar vehículo">
+
+                    <i class="bi bi-trash"></i>
+
+                </button>
+
+            </form>
+
+        @endif
+
+
+        {{-- REPORTE --}}
+        <a href="{{ route(
+                'reportes.vehiculos',
+                ['vehiculo_id' => $vehiculo->id]
+            ) }}"
+           class="btn btn-sm btn-success"
+           title="Reporte del vehículo">
+
+            <i class="bi bi-bar-chart"></i>
+
+        </a>
+
+    </div>
+
+</td>
+                @empty
+
+                    <tr>
+
+                        <td colspan="6"
+                            class="text-center text-muted py-5">
+
+                            <i class="bi bi-car-front fs-2 d-block mb-2"></i>
+
+                            @if($buscar !== '')
+                                No se encontraron vehículos con esa búsqueda.
+                            @else
+                                No hay vehículos registrados.
+                            @endif
+
+                        </td>
+
+                    </tr>
+
+                @endforelse
 
             </tbody>
 
@@ -227,70 +286,245 @@
 
     </div>
 
-</div>
 
+  {{-- PARTE INFERIOR --}}
+<div class="card-footer bg-white">
 
-<div id="sinResultados"
-     class="text-center text-muted py-4 d-none">
+    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
 
-    No se encontraron vehículos con esa búsqueda.
+        <div id="infoVehiculos"
+             class="small text-muted">
+        </div>
+
+        <ul id="paginacionVehiculos"
+            class="pagination pagination-sm mb-0">
+        </ul>
+
+    </div>
 
 </div>
 
 @endsection
-
-
 @push('scripts')
 
 <script>
+document.addEventListener('DOMContentLoaded', function () {
 
-document.addEventListener('DOMContentLoaded', () => {
-
-    const input =
+    const buscador =
         document.getElementById('buscarVehiculo');
 
-    const filas =
-        [...document.querySelectorAll(
+    const selector =
+        document.getElementById('cantidadVehiculos');
+
+    const filas = [
+        ...document.querySelectorAll(
             '#tablaVehiculos tbody tr[data-search]'
-        )];
+        )
+    ];
 
-    const sinResultados =
-        document.getElementById('sinResultados');
+    const info =
+        document.getElementById('infoVehiculos');
+
+    const paginacion =
+        document.getElementById('paginacionVehiculos');
+
+    let paginaActual = 1;
 
 
-    input?.addEventListener('input', () => {
+    function obtenerFiltrados() {
 
-        const busqueda =
-            input.value.toUpperCase().trim();
+        const texto = buscador.value
+            .toUpperCase()
+            .trim();
 
-        let encontrados = 0;
+        return filas.filter(function (fila) {
 
-        filas.forEach(fila => {
+            return fila.dataset.search.includes(texto);
 
-            const coincide =
-                !busqueda ||
-                fila.dataset.search.includes(busqueda);
+        });
+    }
 
-            fila.classList.toggle(
-                'd-none',
-                !coincide
-            );
 
-            if (coincide) {
-                encontrados++;
-            }
+    function mostrarPagina() {
+
+        const filtrados = obtenerFiltrados();
+
+        const cantidad =
+            parseInt(selector.value);
+
+        const total =
+            filtrados.length;
+
+        const totalPaginas =
+            Math.max(1, Math.ceil(total / cantidad));
+
+        if (paginaActual > totalPaginas) {
+            paginaActual = totalPaginas;
+        }
+
+        const inicio =
+            (paginaActual - 1) * cantidad;
+
+        const fin =
+            inicio + cantidad;
+
+
+        // OCULTAR TODAS
+        filas.forEach(function (fila) {
+
+            fila.classList.add('d-none');
 
         });
 
-        sinResultados?.classList.toggle(
-            'd-none',
-            encontrados > 0
+
+        // MOSTRAR PÁGINA ACTUAL
+        filtrados
+            .slice(inicio, fin)
+            .forEach(function (fila) {
+
+                fila.classList.remove('d-none');
+
+            });
+
+
+        // INFORMACIÓN
+        if (total === 0) {
+
+            info.textContent =
+                'No se encontraron vehículos.';
+
+        } else {
+
+            info.textContent =
+                'Mostrando ' +
+                (inicio + 1) +
+                ' a ' +
+                Math.min(fin, total) +
+                ' de ' +
+                total +
+                ' vehículos';
+        }
+
+
+        crearPaginacion(totalPaginas);
+    }
+
+
+    function crearPaginacion(totalPaginas) {
+
+        paginacion.innerHTML = '';
+
+        if (totalPaginas <= 1) {
+            return;
+        }
+
+
+        // ANTERIOR
+        agregarBoton(
+            '‹ Anterior',
+            paginaActual - 1,
+            paginaActual === 1
         );
+
+
+        // SOLO 3 NÚMEROS
+        let inicio =
+            Math.max(1, paginaActual - 1);
+
+        let fin =
+            Math.min(totalPaginas, inicio + 2);
+
+        inicio =
+            Math.max(1, fin - 2);
+
+
+        for (let pagina = inicio; pagina <= fin; pagina++) {
+
+            agregarBoton(
+                pagina,
+                pagina,
+                false,
+                pagina === paginaActual
+            );
+        }
+
+
+        // SIGUIENTE
+        agregarBoton(
+            'Siguiente ›',
+            paginaActual + 1,
+            paginaActual === totalPaginas
+        );
+    }
+
+
+    function agregarBoton(
+        texto,
+        pagina,
+        deshabilitado = false,
+        activo = false
+    ) {
+
+        const li =
+            document.createElement('li');
+
+        li.className =
+            'page-item' +
+            (deshabilitado ? ' disabled' : '') +
+            (activo ? ' active' : '');
+
+
+        const boton =
+            document.createElement('button');
+
+        boton.type = 'button';
+        boton.className = 'page-link';
+        boton.textContent = texto;
+
+
+        if (!deshabilitado) {
+
+            boton.addEventListener('click', function () {
+
+                paginaActual = pagina;
+
+                mostrarPagina();
+
+            });
+        }
+
+
+        li.appendChild(boton);
+
+        paginacion.appendChild(li);
+    }
+
+
+    // BUSCAR AUTOMÁTICAMENTE
+    buscador.addEventListener('input', function () {
+
+        paginaActual = 1;
+
+        mostrarPagina();
 
     });
 
-});
 
+    // CAMBIAR 10 / 25 / 50 / 100
+    selector.addEventListener('change', function () {
+
+        paginaActual = 1;
+
+        mostrarPagina();
+
+    });
+
+
+    // CARGA INICIAL
+    mostrarPagina();
+
+});
 </script>
 
 @endpush
+

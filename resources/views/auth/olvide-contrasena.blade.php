@@ -10,18 +10,15 @@
 
     <title>¿Olvidaste tu contraseña? - SIGECOM</title>
 
-
     <!-- Bootstrap -->
     <link
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
         rel="stylesheet">
 
-
     <!-- Bootstrap Icons -->
     <link
         href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
         rel="stylesheet">
-
 
     <style>
 
@@ -42,7 +39,6 @@
             font-family: Arial, sans-serif;
         }
 
-
         /* TARJETA PRINCIPAL */
 
         .recuperacion-card {
@@ -60,7 +56,6 @@
             box-shadow:
                 0 10px 30px rgba(0, 0, 0, .12);
         }
-
 
         /* CÍRCULO SUPERIOR */
 
@@ -91,7 +86,6 @@
             color: #17211b;
         }
 
-
         /* ENCABEZADO */
 
         .titulo {
@@ -114,7 +108,6 @@
             margin-bottom: 22px;
         }
 
-
         /* CUADRO INTERIOR */
 
         .contenido-recuperacion {
@@ -124,7 +117,6 @@
 
             padding: 24px;
         }
-
 
         .icono-usuario {
             text-align: center;
@@ -136,7 +128,6 @@
             margin-bottom: 8px;
         }
 
-
         .contenido-recuperacion h5 {
             text-align: center;
 
@@ -146,7 +137,6 @@
 
             margin-bottom: 7px;
         }
-
 
         .descripcion {
             text-align: center;
@@ -160,7 +150,6 @@
             margin-bottom: 20px;
         }
 
-
         /* FORMULARIO */
 
         .form-label {
@@ -171,13 +160,11 @@
             color: #343a40;
         }
 
-
         .form-control {
             min-height: 44px;
 
             border-radius: 7px;
         }
-
 
         .btn-enviar {
             width: 100%;
@@ -187,13 +174,11 @@
             font-weight: 600;
         }
 
-
         .btn-volver {
             width: 100%;
 
             margin-top: 10px;
         }
-
 
         /* MENSAJES */
 
@@ -235,7 +220,7 @@
     </div>
 
 
-    <!-- MENSAJE DE SOLICITUD ENVIADA -->
+    <!-- MENSAJE DE SOLICITUD -->
 
     @if(session('estado'))
 
@@ -258,7 +243,7 @@
 
             <i class="bi bi-exclamation-triangle-fill me-1"></i>
 
-            Revise los datos ingresados.
+            Revise el correo ingresado.
 
         </div>
 
@@ -278,16 +263,17 @@
 
 
         <h5>
-            Solicita el restablecimiento
+            Solicita una nueva contraseña
         </h5>
 
 
         <p class="descripcion">
 
-            Ingresa tu correo electrónico y tu CI.
+            Ingresa el correo electrónico registrado en SIGECOM.
 
-            Si los datos corresponden a una cuenta activa,
-            se enviará una solicitud al administrador.
+            Si corresponde a una cuenta activa,
+            se enviará una solicitud al administrador
+            para el restablecimiento de tu contraseña.
 
         </p>
 
@@ -296,7 +282,8 @@
 
         <form
             action="{{ route('password.solicitar') }}"
-            method="POST">
+            method="POST"
+            autocomplete="off">
 
             @csrf
 
@@ -329,60 +316,14 @@
                         name="correo"
                         class="form-control @error('correo') is-invalid @enderror"
                         value="{{ old('correo') }}"
-                        placeholder="Ingrese su correo"
+                        placeholder="ejemplo@gmail.com"
+                        autocomplete="email"
                         required>
 
                 </div>
 
 
                 @error('correo')
-
-                    <div class="text-danger small mt-1">
-
-                        {{ $message }}
-
-                    </div>
-
-                @enderror
-
-            </div>
-
-
-            <!-- CI -->
-
-            <div class="mb-3">
-
-                <label
-                    for="ci"
-                    class="form-label">
-
-                    Cédula de identidad (CI)
-
-                </label>
-
-
-                <div class="input-group">
-
-                    <span class="input-group-text">
-
-                        <i class="bi bi-person-vcard"></i>
-
-                    </span>
-
-
-                    <input
-                        type="text"
-                        id="ci"
-                        name="ci"
-                        class="form-control @error('ci') is-invalid @enderror"
-                        value="{{ old('ci') }}"
-                        placeholder="Ingrese su CI"
-                        required>
-
-                </div>
-
-
-                @error('ci')
 
                     <div class="text-danger small mt-1">
 

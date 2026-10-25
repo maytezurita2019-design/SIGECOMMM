@@ -182,7 +182,7 @@ class ValeCombustibleController extends Controller
     |--------------------------------------------------------------------------
     */
 
-    public function create()
+   public function create()
 {
     $vehiculos = Vehiculo::with([
         'unidad',
@@ -193,39 +193,20 @@ class ValeCombustibleController extends Controller
         ->orderBy('codigo')
         ->get();
 
-    /*
-    |--------------------------------------------------------------------------
-    | ÚLTIMO NÚMERO ENTREGADO A POLICÍA
-    |--------------------------------------------------------------------------
-    */
+    $serie = DB::table('series_vales')
+        ->where('estado', true)
+        ->orderByDesc('id')
+        ->first();
 
-    $ultimoPolicia = \App\Models\EntregaPolicia::query()
-        ->max('numero_final');
-
-    /*
-    |--------------------------------------------------------------------------
-    | ÚLTIMO VALE GAMS
-    |--------------------------------------------------------------------------
-    */
-
-    $ultimoGams = ValeCombustible::query()
-        ->whereNull('entrega_policia_id')
-        ->max('numero_vale');
-
-    /*
-    |--------------------------------------------------------------------------
-    | SIGUIENTE NÚMERO
-    |--------------------------------------------------------------------------
-    */
-
-    $ultimoNumero = max(
-        (int) ($ultimoPolicia ?? 0),
-        (int) ($ultimoGams ?? 0)
-    );
+    if (!$serie) {
+        throw new \RuntimeException(
+            'No existe una serie de vales activa.'
+        );
+    }
 
     $numeroSugerido = sprintf(
         '%06d',
-        $ultimoNumero + 1
+        ((int) $serie->ultimo_numero) + 1
     );
 
     return view(
@@ -236,7 +217,6 @@ class ValeCombustibleController extends Controller
         )
     );
 }
-
     /*
     |--------------------------------------------------------------------------
     | GUARDAR / EMITIR VALE GAMS
@@ -296,156 +276,106 @@ class ValeCombustibleController extends Controller
 
     $vale = DB::transaction(function () use ($datos) {
 
-        // AQUÍ CONTINÚA TODO TU CÓDIGO ACTUAL...
-
-            /*
-            |--------------------------------------------------------------------------
-            | AÑO DEL VALE
-            |--------------------------------------------------------------------------
-            */
 
             $anio = (int) date(
                 'Y',
                 strtotime($datos['fecha'])
             );
 
-            /*
-            |--------------------------------------------------------------------------
-            | BLOQUEAR NUMERACIÓN
-            |--------------------------------------------------------------------------
-            |
-            | Esto evita que dos usuarios puedan emitir el mismo número
-            | simultáneamente.
-            |
-            */
+/*
+|--------------------------------------------------------------------------
+| BLOQUEAR SERIE ACTIVA
+|--------------------------------------------------------------------------
+|
+| Esto evita que dos usuarios puedan emitir el mismo número
+| simultáneamente.
+|
+*/
 
-            $serie = \App\Models\NumeracionVale::bloquear(
-                $anio
-            );
+$serie = \App\Models\NumeracionVale::bloquear(
+    $anio
+);
 
-            /*
-            |--------------------------------------------------------------------------
-            | ÚLTIMO NÚMERO DE POLICÍA
-            |--------------------------------------------------------------------------
-            |
-            | NO filtramos por período.
-            | Se toma el último número entregado registrado.
-            |
-            */
+/*
+|--------------------------------------------------------------------------
+| SIGUIENTE NÚMERO DE LA SERIE ACTIVA
+|--------------------------------------------------------------------------
+|
+| Cada serie mantiene su propio correlativo.
+| No se consideran números pertenecientes a series anteriores.
+|
+*/
 
-            $ultimoPolicia =
-                \App\Models\EntregaPolicia::query()
-                    ->max('numero_final');
+$numero = ((int) $serie->ultimo_numero) + 1;
 
-            /*
-            |--------------------------------------------------------------------------
-            | ÚLTIMO VALE GAMS
-            |--------------------------------------------------------------------------
-            */
+/*
+|--------------------------------------------------------------------------
+| VERIFICAR QUE EL NÚMERO NO EXISTA EN LA SERIE ACTIVA
+|--------------------------------------------------------------------------
+|
+| El mismo número puede existir en una serie anterior.
+| Lo que no puede repetirse es dentro de la misma serie.
+|
+*/
 
-            $ultimoGams =
-                ValeCombustible::query()
-                    ->whereNull(
-                        'entrega_policia_id'
-                    )
-                    ->max('numero_vale');
+$existe = ValeCombustible::query()
+    ->where('serie_vale_id', $serie->id)
+    ->where('numero_vale', $numero)
+    ->exists();
 
-            /*
-            |--------------------------------------------------------------------------
-            | ÚLTIMO CORRELATIVO REAL
-            |--------------------------------------------------------------------------
-            */
+if ($existe) {
+    throw ValidationException::withMessages([
+        'numero_vale' =>
+            'El número de vale ' .
+            sprintf('%06d', $numero) .
+            ' ya existe en la serie activa.',
+    ]);
+}
 
-            $ultimoNumero = max(
-                (int) $serie->ultimo_numero,
-                (int) ($ultimoPolicia ?? 0),
-                (int) ($ultimoGams ?? 0)
-            );
+/*
+|--------------------------------------------------------------------------
+| ACTUALIZAR NUMERACIÓN DE LA SERIE
+|--------------------------------------------------------------------------
+*/
 
-            /*
-            |--------------------------------------------------------------------------
-            | SIGUIENTE NÚMERO
-            |--------------------------------------------------------------------------
-            */
+DB::table('series_vales')
+    ->where('id', $serie->id)
+    ->update([
+        'ultimo_numero' => $numero,
+        'updated_at' => now(),
+    ]);
 
-            $numero = $ultimoNumero + 1;
+/*
+|--------------------------------------------------------------------------
+| CREAR VALE GAMS
+|--------------------------------------------------------------------------
+|
+| El vale queda asociado a la serie activa.
+|
+*/
 
-            $numeroFormateado = sprintf(
-                '%06d',
-                $numero
-            );
+return ValeCombustible::create([
+    'serie_vale_id' => $serie->id,
+    'numero_vale' => $numero,
+    'anio' => $anio,
+    'fecha' => $datos['fecha'],
 
-            /*
-            |--------------------------------------------------------------------------
-            | VERIFICAR QUE EL NÚMERO NO EXISTA
-            |--------------------------------------------------------------------------
-            */
+    'vehiculo_id' => $datos['vehiculo_id'],
 
-            $existe =
-                ValeCombustible::query()
-                    ->where(
-                        'numero_vale',
-                        $numeroFormateado
-                    )
-                    ->exists();
+    'apertura_programatica_id' =>
+        $datos['apertura_programatica_id'],
 
-            if ($existe) {
+    'kilometraje' =>
+        $datos['kilometraje'],
 
-                throw ValidationException::withMessages([
-                    'numero_vale' =>
-                        'El número de vale ' .
-                        $numeroFormateado .
-                        ' ya existe.'
-                ]);
-            }
+    'observacion' =>
+        $datos['observacion'] ?? null,
 
-            /*
-            |--------------------------------------------------------------------------
-            | ACTUALIZAR NUMERACIÓN
-            |--------------------------------------------------------------------------
-            */
+    'usuario_id' =>
+        auth()->id(),
 
-            DB::table('series_vales')
-                ->where('id', $serie->id)
-                ->update([
-                    'ultimo_numero' => $numero,
-                    'updated_at' => now(),
-                ]);
-
-            /*
-            |--------------------------------------------------------------------------
-            | CREAR VALE GAMS
-            |--------------------------------------------------------------------------
-            |
-            | GAMS ya NO utiliza lote_vale_id.
-            |
-            */
-
-            return ValeCombustible::create([
-                'serie_vale_id' => $serie->id,
-                'numero_vale' => $numero,
-                'anio' => $anio,
-                'fecha' => $datos['fecha'],
-
-
-                'vehiculo_id' => $datos['vehiculo_id'],
-
-                'apertura_programatica_id' =>
-                    $datos['apertura_programatica_id'],
-
-                'kilometraje' =>
-                    $datos['kilometraje'],
-
-                'observacion' =>
-                    $datos['observacion'] ?? null,
-
-                'usuario_id' =>
-                    auth()->id(),
-
-                'estado' =>
-                    'EMITIDO',
-            ]);
-
+    'estado' => 'EMITIDO',
+]);
         }, 3);
 
         /*

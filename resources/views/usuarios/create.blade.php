@@ -20,8 +20,9 @@
             </div>
         @endif
 
-        <form action="{{ route('usuarios.store') }}" method="POST">
-            @csrf
+<form action="{{ route('usuarios.store') }}"
+      method="POST"
+      autocomplete="off">            @csrf
 
             <div class="row">
 
@@ -44,22 +45,26 @@
                 </div>
 
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">CI *</label>
-                    <input type="text"
-                           name="ci"
+                    <label class="form-label">Teléfono *</label>
+                    <input type="tel"
+                           name="telefono"
                            class="form-control"
-                           value="{{ old('ci') }}"
+                           value="{{ old('telefono') }}"
+                           maxlength="20"
+                           placeholder="Ej.: 71234567"
                            required>
                 </div>
 
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Correo *</label>
-                    <input type="email"
-                           name="correo"
-                           class="form-control"
-                           value="{{ old('correo') }}"
-                           required>
-                </div>
+    <label class="form-label">Correo *</label>
+
+    <input type="email"
+           name="correo"
+           class="form-control"
+           value="{{ old('correo') }}"
+           autocomplete="off"
+           required>
+</div>
 
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Rol *</label>
@@ -80,30 +85,41 @@
                     <label class="form-label">Estado *</label>
 
                     <select name="estado" class="form-select" required>
-                        <option value="1">Activo</option>
-                        <option value="0">Inactivo</option>
+                        <option value="1"
+                            {{ old('estado', '1') == '1' ? 'selected' : '' }}>
+                            Activo
+                        </option>
+
+                        <option value="0"
+                            {{ old('estado') == '0' ? 'selected' : '' }}>
+                            Inactivo
+                        </option>
                     </select>
                 </div>
 
                 <div class="col-md-6 mb-3">
-                    <label class="form-label">Contraseña *</label>
-                    <input type="password"
-                           name="contrasena"
-                           class="form-control"
-                           required>
-                </div>
+    <label class="form-label">Contraseña *</label>
 
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Confirmar contraseña *</label>
-                    <input type="password"
-                           name="contrasena_confirmation"
-                           class="form-control"
-                           required>
-                </div>
+    <input type="password"
+           name="contrasena"
+           class="form-control"
+           autocomplete="new-password"
+           required>
+</div>
+
+<div class="col-md-6 mb-3">
+    <label class="form-label">Confirmar contraseña *</label>
+
+    <input type="password"
+           name="contrasena_confirmation"
+           class="form-control"
+           autocomplete="new-password"
+           required>
+</div>
 
             </div>
 
-            <button class="btn btn-primary">
+            <button type="submit" class="btn btn-primary">
                 <i class="bi bi-save me-1"></i> Guardar
             </button>
 
@@ -113,6 +129,7 @@
             </a>
 
         </form>
+
     </div>
 </div>
 

@@ -80,20 +80,7 @@
 
     <div class="d-flex gap-2">
 
-        <a
-            href="{{ route('vales-combustible.index', ['tipo' => 'GAMS']) }}"
-            class="btn btn-outline-success"
-        >
-            Vales GAMS
-        </a>
 
-        <a
-            href="{{ route('entregas-policia.create') }}"
-            class="btn btn-pol"
-        >
-            <i class="bi bi-plus-circle me-1"></i>
-            Nueva entrega
-        </a>
 
     </div>
 

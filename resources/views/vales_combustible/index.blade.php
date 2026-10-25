@@ -268,47 +268,23 @@
         </h2>
 
         <p class="text-muted mb-0">
-            GAMS y Policía trabajan con flujos separados para evitar confusiones.
+            Gestión y seguimiento de vales de combustible GAMS.
         </p>
     </div>
 
-  @if($puedeOperar)
+    @if($puedeOperar)
         <div class="d-flex gap-2 flex-wrap no-print">
-
-            <a href="{{ route('entregas-policia.index') }}"
-               class="btn btn-sig-outline">
-                <i class="bi bi-shield-check me-1"></i>
-                Asignaciones a Policía
-            </a>
 
             <a href="{{ route('vales-combustible.create') }}"
                class="btn btn-sig btn-principal">
+
                 <i class="bi bi-plus-circle me-1"></i>
                 Emitir vale
+
             </a>
 
         </div>
     @endif
-
-</div>
-
-<div class="d-flex gap-2 mb-3 no-print">
-
-    <a
-        href="{{ route('vales-combustible.index', array_merge(request()->except(['tipo', 'estado', 'page']), ['tipo' => 'GAMS'])) }}"
-        class="btn {{ $tipoActual === 'GAMS' ? 'btn-sig' : 'btn-sig-outline' }}"
-    >
-        <i class="bi bi-building me-1"></i>
-        VALES GAMS
-    </a>
-
-    <a
-        href="{{ route('vales-combustible.index', array_merge(request()->except(['tipo', 'estado', 'page']), ['tipo' => 'POLICIA'])) }}"
-        class="btn {{ $tipoActual === 'POLICIA' ? 'btn-sig' : 'btn-sig-outline' }}"
-    >
-        <i class="bi bi-shield-check me-1"></i>
-        POLICÍA
-    </a>
 
 </div>
 

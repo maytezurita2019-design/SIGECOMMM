@@ -10,6 +10,11 @@ use Illuminate\Http\Request;
 use App\Models\AperturaProgramatica;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\ParteDiario;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 class ReporteController extends Controller
 {
     /*
@@ -2337,193 +2342,308 @@ public function porApertura(Request $request)
         $totalDiesel = (float) $resumenUnidades->sum('diesel');
         $totalOtros = (float) $resumenUnidades->sum('otros');
 
-        if (!class_exists(\ZipArchive::class)) {
-            $nombre = 'SIGECOM_Reporte_general_consumo_' . now()->format('Ymd_His') . '.csv';
+                /*
+        |--------------------------------------------------------------------------
+        | GENERAR EXCEL CON PHPSPREADSHEET
+        |--------------------------------------------------------------------------
+        */
 
-            return response()->streamDownload(function () use (
-                $resumenUnidades,
-                $totalVales,
-                $totalVehiculos,
-                $totalLitros,
-                $totalMonto,
-                $totalGasolina,
-                $totalDiesel,
-                $totalOtros
-            ) {
-                $out = fopen('php://output', 'w');
-                fwrite($out, "\xEF\xBB\xBF");
+        $spreadsheet = new Spreadsheet();
+        $sheet = $spreadsheet->getActiveSheet();
 
-                fputcsv($out, ['REPORTE GENERAL DE CONSUMO DE COMBUSTIBLE'], ';');
-                fputcsv($out, [], ';');
-                fputcsv($out, ['Vales utilizados', $totalVales], ';');
-                fputcsv($out, ['Vehículos', $totalVehiculos], ';');
-                fputcsv($out, ['Combustible consumido (L)', number_format($totalLitros, 2, ',', '')], ';');
-                fputcsv($out, ['Monto total (Bs)', number_format($totalMonto, 2, ',', '')], ';');
-                fputcsv($out, [], ';');
-                fputcsv($out, ['Unidad', 'Vehículos', 'Vales', 'Gasolina (L)', 'Diésel (L)', 'Otros (L)', 'Total litros', 'Monto total (Bs)'], ';');
+        $sheet->setTitle('Reporte General');
 
-                foreach ($resumenUnidades as $fila) {
-                    fputcsv($out, [
-                        $fila->unidad,
-                        $fila->vehiculos,
-                        $fila->vales,
-                        number_format($fila->gasolina, 2, ',', ''),
-                        number_format($fila->diesel, 2, ',', ''),
-                        number_format($fila->otros, 2, ',', ''),
-                        number_format($fila->litros, 2, ',', ''),
-                        number_format($fila->total, 2, ',', ''),
-                    ], ';');
-                }
+        /*
+        |--------------------------------------------------------------------------
+        | TÍTULOS
+        |--------------------------------------------------------------------------
+        */
 
-                fputcsv($out, [
-                    'TOTAL',
-                    $totalVehiculos,
-                    $totalVales,
-                    number_format($totalGasolina, 2, ',', ''),
-                    number_format($totalDiesel, 2, ',', ''),
-                    number_format($totalOtros, 2, ',', ''),
-                    number_format($totalLitros, 2, ',', ''),
-                    number_format($totalMonto, 2, ',', ''),
-                ], ';');
-
-                fclose($out);
-            }, $nombre, ['Content-Type' => 'text/csv; charset=UTF-8']);
-        }
-
-        $esc = static fn ($valor) => htmlspecialchars(
-            (string) $valor,
-            ENT_XML1 | ENT_QUOTES,
-            'UTF-8'
+        $sheet->mergeCells('A1:H1');
+        $sheet->setCellValue(
+            'A1',
+            'SECRETARÍA MUNICIPAL DE FINANZAS Y ADMINISTRACIÓN - DIRECCIÓN ADMINISTRATIVA'
         );
 
-        $texto = static function (string $celda, $valor, int $estilo = 0) use ($esc): string {
-            return '<c r="' . $celda . '" t="inlineStr" s="' . $estilo . '"><is><t>' .
-                $esc($valor) . '</t></is></c>';
-        };
+        $sheet->mergeCells('A2:H2');
+        $sheet->setCellValue(
+            'A2',
+            'REPORTE GENERAL DE CONSUMO DE COMBUSTIBLE'
+        );
 
-        $numero = static function (string $celda, $valor, int $estilo): string {
-            return '<c r="' . $celda . '" s="' . $estilo . '"><v>' .
-                ((float) $valor) . '</v></c>';
-        };
+        $sheet->getStyle('A1')->getFont()
+            ->setBold(true)
+            ->setSize(14);
 
-        $sheetRows = [];
-        $sheetRows[] = '<row r="1" ht="24" customHeight="1">' .
-            $texto('A1', 'SECRETARIA MUNICIPAL DE FINANZAS Y ADMINISTRACION - DIRECCION ADMINISTRATIVA', 1) .
-            '</row>';
-        $sheetRows[] = '<row r="2" ht="22" customHeight="1">' .
-            $texto('A2', 'REPORTE GENERAL DE CONSUMO DE COMBUSTIBLE', 2) .
-            '</row>';
+        $sheet->getStyle('A2')->getFont()
+            ->setBold(true)
+            ->setSize(12);
 
-        $sheetRows[] = '<row r="4">' .
-            $texto('A4', 'VALES UTILIZADOS', 3) .
-            $texto('B4', 'VEHICULOS', 3) .
-            $texto('C4', 'COMBUSTIBLE CONSUMIDO (L)', 3) .
-            $texto('D4', 'MONTO TOTAL (Bs)', 3) .
-            '</row>';
-        $sheetRows[] = '<row r="5">' .
-            $numero('A5', $totalVales, 6) .
-            $numero('B5', $totalVehiculos, 6) .
-            $numero('C5', round($totalLitros, 2), 5) .
-            $numero('D5', round($totalMonto, 2), 5) .
-            '</row>';
+        $sheet->getStyle('A1:H2')
+            ->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        $headers = ['UNIDAD', 'VEHICULOS', 'VALES', 'GASOLINA (L)', 'DIESEL (L)', 'OTROS (L)', 'TOTAL LITROS', 'MONTO TOTAL (Bs)'];
-        $headerCells = [];
-        foreach ($headers as $i => $header) {
-            $headerCells[] = $texto(chr(65 + $i) . '7', $header, 3);
+        /*
+        |--------------------------------------------------------------------------
+        | RESUMEN GENERAL
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet->setCellValue('A4', 'VALES UTILIZADOS');
+        $sheet->setCellValue('B4', 'VEHÍCULOS');
+        $sheet->setCellValue('C4', 'COMBUSTIBLE CONSUMIDO (L)');
+        $sheet->setCellValue('D4', 'MONTO TOTAL (Bs)');
+
+        $sheet->setCellValue('A5', $totalVales);
+        $sheet->setCellValue('B5', $totalVehiculos);
+        $sheet->setCellValue('C5', $totalLitros);
+        $sheet->setCellValue('D5', $totalMonto);
+
+        /*
+        |--------------------------------------------------------------------------
+        | CABECERA DE TABLA
+        |--------------------------------------------------------------------------
+        */
+
+        $filaCabecera = 7;
+
+        $encabezados = [
+            'A' => 'UNIDAD',
+            'B' => 'VEHÍCULOS',
+            'C' => 'VALES',
+            'D' => 'GASOLINA (L)',
+            'E' => 'DIÉSEL (L)',
+            'F' => 'OTROS (L)',
+            'G' => 'TOTAL LITROS',
+            'H' => 'MONTO TOTAL (Bs)',
+        ];
+
+        foreach ($encabezados as $columna => $titulo) {
+            $sheet->setCellValue(
+                $columna . $filaCabecera,
+                $titulo
+            );
         }
-        $sheetRows[] = '<row r="7">' . implode('', $headerCells) . '</row>';
 
-        $r = 7;
-        foreach ($resumenUnidades as $fila) {
-            $r++;
-            $sheetRows[] = '<row r="' . $r . '">' .
-                $texto('A' . $r, $fila->unidad, 4) .
-                $numero('B' . $r, $fila->vehiculos, 6) .
-                $numero('C' . $r, $fila->vales, 6) .
-                $numero('D' . $r, round($fila->gasolina, 2), 5) .
-                $numero('E' . $r, round($fila->diesel, 2), 5) .
-                $numero('F' . $r, round($fila->otros, 2), 5) .
-                $numero('G' . $r, round($fila->litros, 2), 5) .
-                $numero('H' . $r, round($fila->total, 2), 5) .
-                '</row>';
+        /*
+        |--------------------------------------------------------------------------
+        | DATOS POR UNIDAD
+        |--------------------------------------------------------------------------
+        */
+
+        $fila = 8;
+
+        foreach ($resumenUnidades as $registro) {
+
+            $sheet->setCellValue(
+                'A' . $fila,
+                $registro->unidad
+            );
+
+            $sheet->setCellValue(
+                'B' . $fila,
+                $registro->vehiculos
+            );
+
+            $sheet->setCellValue(
+                'C' . $fila,
+                $registro->vales
+            );
+
+            $sheet->setCellValue(
+                'D' . $fila,
+                $registro->gasolina
+            );
+
+            $sheet->setCellValue(
+                'E' . $fila,
+                $registro->diesel
+            );
+
+            $sheet->setCellValue(
+                'F' . $fila,
+                $registro->otros
+            );
+
+            $sheet->setCellValue(
+                'G' . $fila,
+                $registro->litros
+            );
+
+            $sheet->setCellValue(
+                'H' . $fila,
+                $registro->total
+            );
+
+            $fila++;
         }
 
-        $r++;
-        $sheetRows[] = '<row r="' . $r . '">' .
-            $texto('A' . $r, 'TOTAL', 7) .
-            $numero('B' . $r, $totalVehiculos, 8) .
-            $numero('C' . $r, $totalVales, 8) .
-            $numero('D' . $r, round($totalGasolina, 2), 9) .
-            $numero('E' . $r, round($totalDiesel, 2), 9) .
-            $numero('F' . $r, round($totalOtros, 2), 9) .
-            $numero('G' . $r, round($totalLitros, 2), 9) .
-            $numero('H' . $r, round($totalMonto, 2), 9) .
-            '</row>';
+        /*
+        |--------------------------------------------------------------------------
+        | TOTAL GENERAL
+        |--------------------------------------------------------------------------
+        */
 
-        $sheet = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-            '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-            '<sheetViews><sheetView workbookViewId="0"><pane ySplit="7" topLeftCell="A8" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>' .
-            '<cols>' .
-                '<col min="1" max="1" width="48" customWidth="1"/>' .
-                '<col min="2" max="3" width="14" customWidth="1"/>' .
-                '<col min="4" max="8" width="18" customWidth="1"/>' .
-            '</cols>' .
-            '<sheetData>' . implode('', $sheetRows) . '</sheetData>' .
-            '<mergeCells count="2"><mergeCell ref="A1:H1"/><mergeCell ref="A2:H2"/></mergeCells>' .
-            '<autoFilter ref="A7:H' . max(7, $r - 1) . '"/>' .
-            '</worksheet>';
+        $sheet->setCellValue('A' . $fila, 'TOTAL GENERAL');
+        $sheet->setCellValue('B' . $fila, $totalVehiculos);
+        $sheet->setCellValue('C' . $fila, $totalVales);
+        $sheet->setCellValue('D' . $fila, $totalGasolina);
+        $sheet->setCellValue('E' . $fila, $totalDiesel);
+        $sheet->setCellValue('F' . $fila, $totalOtros);
+        $sheet->setCellValue('G' . $fila, $totalLitros);
+        $sheet->setCellValue('H' . $fila, $totalMonto);
 
-        $styles = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-            '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-            '<numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00"/></numFmts>' .
-            '<fonts count="4">' .
-                '<font><sz val="11"/><name val="Calibri"/></font>' .
-                '<font><b/><sz val="14"/><color rgb="FF075326"/><name val="Calibri"/></font>' .
-                '<font><b/><sz val="12"/><color rgb="FF08712F"/><name val="Calibri"/></font>' .
-                '<font><b/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>' .
-            '</fonts>' .
-            '<fills count="4">' .
-                '<fill><patternFill patternType="none"/></fill>' .
-                '<fill><patternFill patternType="gray125"/></fill>' .
-                '<fill><patternFill patternType="solid"><fgColor rgb="FF08712F"/><bgColor indexed="64"/></patternFill></fill>' .
-                '<fill><patternFill patternType="solid"><fgColor rgb="FFE7F4EB"/><bgColor indexed="64"/></patternFill></fill>' .
-            '</fills>' .
-            '<borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders>' .
-            '<cellXfs count="10">' .
-                '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>' .
-                '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyAlignment="1"><alignment horizontal="center"/></xf>' .
-                '<xf numFmtId="0" fontId="2" fillId="0" borderId="0" applyAlignment="1"><alignment horizontal="center"/></xf>' .
-                '<xf numFmtId="0" fontId="3" fillId="2" borderId="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" wrapText="1"/></xf>' .
-                '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" applyBorder="1"/>' .
-                '<xf numFmtId="164" fontId="0" fillId="0" borderId="1" applyNumberFormat="1" applyBorder="1"/>' .
-                '<xf numFmtId="1" fontId="0" fillId="0" borderId="1" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>' .
-                '<xf numFmtId="0" fontId="3" fillId="2" borderId="1" applyFill="1" applyBorder="1"/>' .
-                '<xf numFmtId="1" fontId="3" fillId="2" borderId="1" applyFill="1" applyNumberFormat="1" applyBorder="1"/>' .
-                '<xf numFmtId="164" fontId="3" fillId="2" borderId="1" applyFill="1" applyNumberFormat="1" applyBorder="1"/>' .
-            '</cellXfs>' .
-            '</styleSheet>';
+        /*
+        |--------------------------------------------------------------------------
+        | ESTILO VERDE SIGECOM
+        |--------------------------------------------------------------------------
+        */
 
-        $tmp = tempnam(sys_get_temp_dir(), 'sigecom_consumo_');
-        $zip = new \ZipArchive();
-        $zip->open($tmp, \ZipArchive::OVERWRITE);
+        $estiloEncabezado = [
+            'font' => [
+                'bold' => true,
+                'color' => [
+                    'rgb' => 'FFFFFF',
+                ],
+            ],
 
-        $zip->addFromString('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
-        $zip->addFromString('_rels/.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-        $zip->addFromString('xl/workbook.xml', '<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Reporte General" sheetId="1" r:id="rId1"/></sheets></workbook>');
-        $zip->addFromString('xl/_rels/workbook.xml.rels', '<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
-        $zip->addFromString('xl/worksheets/sheet1.xml', $sheet);
-        $zip->addFromString('xl/styles.xml', $styles);
-        $zip->close();
+            'fill' => [
+                'fillType' => Fill::FILL_SOLID,
+                'startColor' => [
+                    'rgb' => '08712F',
+                ],
+            ],
 
-        $nombre = 'SIGECOM_Reporte_general_consumo_' . now()->format('Ymd_His') . '.xlsx';
+            'alignment' => [
+                'horizontal' => Alignment::HORIZONTAL_CENTER,
+                'vertical' => Alignment::VERTICAL_CENTER,
+            ],
 
-        return response()->download(
-            $tmp,
-            $nombre,
-            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
-        )->deleteFileAfterSend(true);
-    }
+            'borders' => [
+                'allBorders' => [
+                    'borderStyle' => Border::BORDER_THIN,
+                ],
+            ],
+        ];
+
+        $sheet->getStyle('A4:D4')
+            ->applyFromArray($estiloEncabezado);
+
+        $sheet->getStyle('A7:H7')
+            ->applyFromArray($estiloEncabezado);
+
+        /*
+        |--------------------------------------------------------------------------
+        | BORDES DE LOS DATOS
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet->getStyle('A5:D5')
+            ->getBorders()
+            ->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
+
+        $sheet->getStyle('A8:H' . $fila)
+            ->getBorders()
+            ->getAllBorders()
+            ->setBorderStyle(Border::BORDER_THIN);
+
+        /*
+        |--------------------------------------------------------------------------
+        | TOTAL GENERAL
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet->getStyle('A' . $fila . ':H' . $fila)
+            ->getFont()
+            ->setBold(true);
+
+        $sheet->getStyle('A' . $fila . ':H' . $fila)
+            ->getFill()
+            ->setFillType(Fill::FILL_SOLID)
+            ->getStartColor()
+            ->setRGB('E7F4EB');
+
+        /*
+        |--------------------------------------------------------------------------
+        | FORMATO NUMÉRICO
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet->getStyle('C5:D5')
+            ->getNumberFormat()
+            ->setFormatCode('#,##0.00');
+
+        if ($fila >= 8) {
+            $sheet->getStyle('D8:H' . $fila)
+                ->getNumberFormat()
+                ->setFormatCode('#,##0.00');
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | TAMAÑO DE COLUMNAS
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet->getColumnDimension('A')->setWidth(45);
+        $sheet->getColumnDimension('B')->setWidth(14);
+        $sheet->getColumnDimension('C')->setWidth(14);
+        $sheet->getColumnDimension('D')->setWidth(18);
+        $sheet->getColumnDimension('E')->setWidth(18);
+        $sheet->getColumnDimension('F')->setWidth(18);
+        $sheet->getColumnDimension('G')->setWidth(18);
+        $sheet->getColumnDimension('H')->setWidth(22);
+
+        /*
+        |--------------------------------------------------------------------------
+        | CONGELAR CABECERA Y FILTROS
+        |--------------------------------------------------------------------------
+        */
+
+        $sheet->freezePane('A8');
+
+        if ($fila > 8) {
+            $sheet->setAutoFilter(
+                'A7:H' . ($fila - 1)
+            );
+        }
+
+        /*
+        |--------------------------------------------------------------------------
+        | DESCARGAR XLSX
+        |--------------------------------------------------------------------------
+        */
+
+        $nombre =
+            'SIGECOM_Reporte_general_consumo_' .
+            now()->format('Ymd_His') .
+            '.xlsx';
+
+        $rutaTemporal =
+            tempnam(
+                sys_get_temp_dir(),
+                'sigecom_excel_'
+            );
+
+        $writer = new Xlsx($spreadsheet);
+
+        $writer->save($rutaTemporal);
+
+        $spreadsheet->disconnectWorksheets();
+
+        unset($spreadsheet);
+
+        return response()
+            ->download(
+                $rutaTemporal,
+                $nombre,
+                [
+                    'Content-Type' =>
+                        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                ]
+            )
+            ->deleteFileAfterSend(true);    }
 
     public function vehiculosExcel(Request $request)
 {

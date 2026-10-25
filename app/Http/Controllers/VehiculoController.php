@@ -25,11 +25,11 @@ class VehiculoController extends Controller
 
             if ($request->has($campo)) {
 
-                $valor = preg_replace(
-                    '/\s+/',
-                    ' ',
-                    trim((string) $request->input($campo))
-                );
+$valor = preg_replace(
+    '/\s+/',
+    ' ',
+    trim((string) $request->input($campo))
+);
 
                 $datos[$campo] = in_array(
                     $campo,
@@ -143,20 +143,20 @@ class VehiculoController extends Controller
     }
 
     public function index()
-    {
-        $vehiculos = Vehiculo::with([
-            'unidad',
-            'aperturaProgramatica.fuenteFinanciamiento',
-            'aperturaProgramatica.organismoFinanciador',
-        ])
-            ->orderBy('codigo')
-            ->get();
+{
+    $vehiculos = Vehiculo::with([
+        'unidad',
+        'aperturaProgramatica.fuenteFinanciamiento',
+        'aperturaProgramatica.organismoFinanciador',
+    ])
+       ->orderByDesc('id')
+        ->get();
 
-        return view(
-            'vehiculos.index',
-            compact('vehiculos')
-        );
-    }
+    return view(
+        'vehiculos.index',
+        compact('vehiculos')
+    );
+}
 
     public function create()
     {
