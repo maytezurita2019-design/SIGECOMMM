@@ -37,11 +37,13 @@
 
 <a href="{{ route('fuentes-financiamiento.edit', $fuenteFinanciamiento) }}"
    class="btn btn-warning">
+    <i class="bi bi-pencil me-1" aria-hidden="true"></i>
     Editar
 </a>
 
 <a href="{{ route('fuentes-financiamiento.index') }}"
    class="btn btn-secondary">
+    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>
     Volver
 </a>
 

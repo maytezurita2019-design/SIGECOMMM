@@ -55,10 +55,14 @@
 </select>
 </div>
 
-<button class="btn btn-primary">Guardar</button>
+<button class="btn btn-primary">
+    <i class="bi bi-save me-1" aria-hidden="true"></i>
+    Guardar
+</button>
 
 <a href="{{ route('organismos-financiadores.index') }}"
    class="btn btn-secondary">
+    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
 Cancelar
 </a>
 

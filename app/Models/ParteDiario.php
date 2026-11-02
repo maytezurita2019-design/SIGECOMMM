@@ -15,16 +15,43 @@ class ParteDiario extends Model
         'vehiculo_id',
         'fecha',
         'presentado',
+        'odometro_funciona',
+        'km_inicial',
+        'km_final',
         'observacion',
     ];
 
     protected $casts = [
         'fecha' => 'date',
         'presentado' => 'boolean',
+        'odometro_funciona' => 'boolean',
+        'km_inicial' => 'integer',
+        'km_final' => 'integer',
     ];
 
     public function vehiculo()
     {
         return $this->belongsTo(Vehiculo::class);
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | CALCULAR KILÓMETROS RECORRIDOS
+    |--------------------------------------------------------------------------
+    */
+
+    public function getKmRecorridosAttribute(): ?int
+    {
+        if (
+            $this->presentado === false ||
+            $this->odometro_funciona === false ||
+            $this->km_inicial === null ||
+            $this->km_final === null ||
+            $this->km_final < $this->km_inicial
+        ) {
+            return null;
+        }
+
+        return $this->km_final - $this->km_inicial;
     }
 }

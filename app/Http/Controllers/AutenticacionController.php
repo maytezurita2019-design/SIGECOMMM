@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -30,6 +31,16 @@ class AutenticacionController extends Controller
             ]
         );
 
+        $usuario = Usuario::where('correo', $datos['correo'])->first();
+
+        if (!$usuario) {
+            return back()
+                ->withErrors([
+                    'correo' => 'El correo electrónico no está registrado.',
+                ])
+                ->onlyInput('correo');
+        }
+
         $recordarme = $request->boolean('recordarme');
 
         if (Auth::attempt([
@@ -45,7 +56,7 @@ class AutenticacionController extends Controller
 
         return back()
             ->withErrors([
-                'correo' => 'El correo o la contraseña son incorrectos.',
+                'contrasena' => 'La contraseña es incorrecta.',
             ])
             ->onlyInput('correo');
     }

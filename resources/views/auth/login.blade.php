@@ -14,7 +14,7 @@
 
     <!-- Bootstrap Icons -->
     <link
-        href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+        href="{{ asset('vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}"
         rel="stylesheet">
 
     <style>
@@ -59,7 +59,7 @@
             font-family: Arial, Helvetica, sans-serif;
 
             background-image:
-                url("{{ asset('images/fondo-parque-automotor.png') }}");
+                url("{{ asset('images/filtro verde.png') }}");
 
             background-size: cover;
             background-position: center;
@@ -860,6 +860,22 @@
                     Iniciar sesión
 
                 </button>
+
+                
+                <div class="text-center mt-4">
+    <a
+        href="{{ route('registro') }}"
+        style="
+            color: #08712f;
+            font-weight: 700;
+            font-size: 14px;
+            text-decoration: none;
+        "
+    >
+        <i class="bi bi-person-plus me-1"></i>
+        Crear cuenta nueva
+    </a>
+</div>
 
             </form>
 

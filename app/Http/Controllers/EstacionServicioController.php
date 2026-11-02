@@ -7,9 +7,31 @@ use Illuminate\Http\Request;
 
 class EstacionServicioController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $estaciones = EstacionServicio::orderBy('nombre')->get();
+        $filtros = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:255'],
+            'estado' => ['nullable', 'in:activo,inactivo'],
+        ]);
+
+        $consulta = EstacionServicio::query()->orderBy('nombre');
+
+        if (!empty($filtros['buscar'])) {
+            $busqueda = trim($filtros['buscar']);
+
+            $consulta->where(function ($subconsulta) use ($busqueda) {
+                $coincidencia = '%' . $busqueda . '%';
+                $subconsulta->where('nombre', 'ILIKE', $coincidencia)
+                    ->orWhere('direccion', 'ILIKE', $coincidencia)
+                    ->orWhere('telefono', 'ILIKE', $coincidencia);
+            });
+        }
+
+        if (isset($filtros['estado']) && $filtros['estado'] !== '') {
+            $consulta->where('estado', $filtros['estado'] === 'activo');
+        }
+
+        $estaciones = $consulta->get();
 
         return view('estaciones_servicio.index', compact('estaciones'));
     }

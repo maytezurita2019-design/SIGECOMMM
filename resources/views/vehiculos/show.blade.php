@@ -35,6 +35,15 @@
 <hr>
 
 <p>
+    <strong>Detalle de asignación:</strong><br>
+    {{ filled($vehiculo->detalle_asignacion_predeterminado)
+        ? $vehiculo->detalle_asignacion_predeterminado
+        : 'Sin detalle de asignación registrado' }}
+</p>
+
+<hr>
+
+<p>
     <strong>Estado:</strong>
 
     @if($vehiculo->estado)
@@ -46,11 +55,13 @@
 
 <a href="{{ route('vehiculos.edit', $vehiculo) }}"
    class="btn btn-warning">
+    <i class="bi bi-pencil me-1" aria-hidden="true"></i>
     Editar
 </a>
 
 <a href="{{ route('vehiculos.index') }}"
    class="btn btn-secondary">
+    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>
     Volver
 </a>
 

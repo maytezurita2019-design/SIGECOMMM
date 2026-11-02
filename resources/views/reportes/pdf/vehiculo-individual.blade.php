@@ -531,22 +531,8 @@
                     </td>
 
 
-                    {{-- DETALLE AUTOMÁTICO --}}
-
                     <td class="centro">
-
-                        ASIGNADO A
-                        {{ mb_strtoupper($vehiculo->tipo ?: 'VEHÍCULO') }}
-
-                        @if($vehiculo->unidad)
-
-                            DE
-                            {{ mb_strtoupper(
-                                $vehiculo->unidad->nombre ?? ''
-                            ) }}
-
-                        @endif
-
+                        {{ $vale->detalle_asignacion ?: '—' }}
                     </td>
 
 

@@ -9,6 +9,78 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('series_vales')) {
+            Schema::create('series_vales', function (Blueprint $table) {
+                $table->id();
+
+                $table->string('nombre', 100);
+
+                $table->unsignedBigInteger('numero_inicial')
+                    ->default(1);
+
+                $table->unsignedBigInteger('ultimo_numero')
+                    ->default(0);
+
+                $table->boolean('estado')
+                    ->default(true);
+
+                $table->text('motivo')->nullable();
+
+                $table->timestamps();
+            });
+        }
+
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            $ultimoVale = (int) (DB::table('vales_combustible')
+                ->max('numero_vale') ?? 0);
+            $ultimoPolicia = (int) (DB::table('entregas_policia')
+                ->max('numero_final') ?? 0);
+            $ultimoNumero = max($ultimoVale, $ultimoPolicia);
+
+            $serieId = DB::table('series_vales')->insertGetId([
+                'nombre' => 'Serie inicial',
+                'numero_inicial' => 1,
+                'ultimo_numero' => $ultimoNumero,
+                'estado' => true,
+                'motivo' => 'Serie creada a partir de la numeración existente.',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            if (!Schema::hasColumn('vales_combustible', 'serie_vale_id')) {
+                Schema::table('vales_combustible', function (Blueprint $table) {
+                    $table->foreignId('serie_vale_id')
+                        ->nullable()
+                        ->constrained('series_vales')
+                        ->cascadeOnUpdate()
+                        ->restrictOnDelete();
+                });
+            }
+            DB::table('vales_combustible')->update(['serie_vale_id' => $serieId]);
+
+            foreach (Schema::getIndexes('vales_combustible') as $index) {
+                if (
+                    ($index['unique'] ?? false)
+                    && ($index['columns'] ?? []) === ['anio', 'numero_vale']
+                ) {
+                    Schema::table('vales_combustible', function (Blueprint $table) use ($index) {
+                        $table->dropUnique($index['name']);
+                    });
+                }
+            }
+
+            Schema::table('vales_combustible', function (Blueprint $table) {
+                $table->unique(
+                    ['serie_vale_id', 'numero_vale'],
+                    'vales_serie_numero_unique'
+                );
+            });
+
+            Schema::dropIfExists('numeraciones_vales');
+
+            return;
+        }
+
         /*
         |--------------------------------------------------------------------------
         | 1. Crear las series de numeración
@@ -18,25 +90,6 @@ return new class extends Migration
         | El cambio de año NO crea una nueva serie.
         |
         */
-
-        Schema::create('series_vales', function (Blueprint $table) {
-            $table->id();
-
-            $table->string('nombre', 100);
-
-            $table->unsignedBigInteger('numero_inicial')
-                ->default(1);
-
-            $table->unsignedBigInteger('ultimo_numero')
-                ->default(0);
-
-            $table->boolean('estado')
-                ->default(true);
-
-            $table->text('motivo')->nullable();
-
-            $table->timestamps();
-        });
 
         /*
         |--------------------------------------------------------------------------

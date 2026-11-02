@@ -52,6 +52,7 @@
 
         <a href="{{ route('estaciones-servicio.index') }}"
            class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>
             Volver
         </a>
 

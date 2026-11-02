@@ -7,7 +7,8 @@ use App\Models\{
     LoteVale,
     NumeracionVale,
     ValeCombustible,
-    AperturaProgramatica
+    AperturaProgramatica,
+    TipoCombustible
 };
 
 use Illuminate\Http\Request;
@@ -155,6 +156,9 @@ class EntregaPoliciaController extends Controller
 
             'solicitud_token' =>
                 'required|uuid',
+
+            'cantidad_gasolina' => 'required|integer|min:0',
+            'cantidad_diesel' => 'required|integer|min:0',
         ]);
 
         $entrega = DB::transaction(function () use ($datos) {
@@ -218,6 +222,28 @@ class EntregaPoliciaController extends Controller
 
             $cantidad = $fin - $inicio + 1;
 
+            $gasolina = (int) $datos['cantidad_gasolina'];
+            $diesel = (int) $datos['cantidad_diesel'];
+            if ($diesel !== 0 || $gasolina !== $cantidad) {
+                throw ValidationException::withMessages([
+                    'cantidad_gasolina' => 'La Policía solo recibe vales de gasolina; la cantidad debe coincidir con el lote (' . $cantidad . ').',
+                ]);
+            }
+
+            // Buscar los tipos existentes; no asumir IDs fijos.
+            $tipoGasolina = TipoCombustible::query()
+                ->whereRaw("UPPER(nombre) LIKE ?", ['%GASOLINA%'])
+                ->orderBy('id')->first();
+            $tipoDiesel = TipoCombustible::query()
+                ->whereRaw("UPPER(nombre) LIKE ? OR UPPER(nombre) LIKE ?", ['%DIESEL%', '%DIÉSEL%'])
+                ->orderBy('id')->first();
+            if (($gasolina > 0 && !$tipoGasolina) || ($diesel > 0 && !$tipoDiesel)) {
+                throw ValidationException::withMessages([
+                    'cantidad_gasolina' => 'Configure los tipos de combustible Gasolina y Diésel antes de registrar esta entrega.',
+                ]);
+            }
+
+
             if ($cantidad < 1) {
                 throw ValidationException::withMessages([
                     'lote_vale_id' =>
@@ -226,8 +252,18 @@ class EntregaPoliciaController extends Controller
             }
 
            $serie = NumeracionVale::bloquear(
-    (int) $lote->periodo->anio
+    (int) $lote->periodo->anio,
+    'POL-GAS'
 );
+
+            if (
+                $lote->serie_correlativa_id !== null
+                && (int) $lote->serie_correlativa_id !== (int) $serie->id
+            ) {
+                throw ValidationException::withMessages([
+                    'lote_vale_id' => 'El lote no corresponde a la serie POL-GAS de su gestión.',
+                ]);
+            }
 
 /*
 |--------------------------------------------------------------------------
@@ -246,7 +282,7 @@ class EntregaPoliciaController extends Controller
 */
 
 $numeroDuplicado = ValeCombustible::query()
-    ->where('serie_vale_id', $serie->id)
+    ->where('serie_correlativa_id', $serie->id)
     ->whereBetween(
         'numero_vale',
         [$inicio, $fin]
@@ -296,7 +332,8 @@ $bloque = [];
 for ($numero = $inicio; $numero <= $fin; $numero++) {
 
 $bloque[] = [
-    'serie_vale_id' => $serie->id,
+    'serie_vale_id' => null,
+    'serie_correlativa_id' => $serie->id,
     'numero_vale' => $numero,
     'anio' => $lote->periodo->anio,
     'lote_vale_id' => $lote->id,
@@ -305,6 +342,9 @@ $bloque[] = [
     'usuario_id' => auth()->id(),
     'apertura_programatica_id' =>
         $datos['apertura_programatica_id'],
+    'tipo_combustible_id' => ($numero - $inicio < $gasolina)
+        ? $tipoGasolina?->id
+        : $tipoDiesel?->id,
     'estado' => 'ENTREGADO',
     'created_at' => $ahora,
     'updated_at' => $ahora,
@@ -320,26 +360,7 @@ if (!empty($bloque)) {
     DB::table('vales_combustible')->insert($bloque);
 }
 
-/*
-|--------------------------------------------------------------------------
-| ACTUALIZAR ÚLTIMO NÚMERO DE LA SERIE ACTIVA
-|--------------------------------------------------------------------------
-|
-| Después de entregar el lote a Policía, la serie debe continuar
-| desde el número final de ese lote.
-|
-*/
-
-DB::table('series_vales')
-    ->where('id', $serie->id)
-    ->update([
-        'ultimo_numero' => max(
-            (int) $serie->ultimo_numero,
-            (int) $fin
-        ),
-        'updated_at' => now(),
-    ]);
-            return $entrega;
+return $entrega;
 
         }, 3);
 

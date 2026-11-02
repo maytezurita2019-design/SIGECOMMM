@@ -1,4 +1,5 @@
-@extends('layouts.app')
+@extends(request()->boolean('fragment') ? 'reportes.layouts.fragmento' : 'layouts.app')
+@include('reportes.partials.auto-print')
 
 @section('title', 'Reporte por apertura programática')
 
@@ -338,6 +339,7 @@
 
             <form method="GET"
                   action="{{ route('reportes.aperturas') }}">
+                <input type="hidden" name="ambito" value="{{ request('ambito', 'todos') }}">
 
                 <div class="row g-3">
 
@@ -431,10 +433,14 @@
                             Fecha inicial
                         </label>
 
-                        <input type="date"
-                               name="fecha_inicio"
-                               class="form-control"
-                               value="{{ request('fecha_inicio') }}">
+                       <input
+    type="date"
+    id="fecha_inicio"
+    name="fecha_inicio"
+    class="form-control"
+    value="{{ request('fecha_inicio') }}"
+    onclick="this.showPicker()"
+>
 
                     </div>
 
@@ -444,11 +450,14 @@
                         <label class="form-label fw-semibold">
                             Fecha final
                         </label>
-
-                        <input type="date"
-                               name="fecha_fin"
-                               class="form-control"
-                               value="{{ request('fecha_fin') }}">
+<input
+    type="date"
+    id="fecha_fin"
+    name="fecha_fin"
+    class="form-control"
+    value="{{ request('fecha_fin') }}"
+    onclick="this.showPicker()"
+>
 
                     </div>
 
@@ -920,6 +929,9 @@ function exportarPdf() {
         '[name="fecha_fin"]'
     )?.value;
 
+    const ambito = document.querySelector('[name="ambito"]')?.value || 'todos';
+
+    params.append('ambito', ambito);
 
     if (apertura) {
         params.append('apertura_programatica_id', apertura);

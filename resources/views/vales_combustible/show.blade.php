@@ -8,7 +8,7 @@
 
     <div>
         <h2>
-            Vale N.º {{ sprintf('%06d', (int) $valeCombustible->numero_vale) }}
+            Vale N.º {{ $valeCombustible->numero_vale_formateado }}
 
             @if($valeCombustible->periodo)
                 · {{ $valeCombustible->periodo->nombre }}
@@ -174,10 +174,7 @@
                 <strong>Número de vale</strong>
 
                 <div>
-                    {{ sprintf(
-                        '%06d',
-                        (int) $valeCombustible->numero_vale
-                    ) }}
+                    {{ $valeCombustible->numero_vale_formateado }}
                 </div>
 
             </div>
@@ -289,19 +286,36 @@
             {{-- COMBUSTIBLE Y ESTACIÓN --}}
             <div class="col-md-6 mb-3">
 
-                <strong>Combustible / Estación</strong>
+                <strong>Combustible</strong>
 
                 <div>
 
                     {{ $valeCombustible->tipoCombustible?->nombre ?? 'Pendiente' }}
 
-                    /
-
-                    {{ $valeCombustible->estacionServicio?->nombre ?? 'Pendiente' }}
-
                 </div>
 
             </div>
+
+            @php
+                $esDieselVale = str_contains(mb_strtoupper((string) ($valeCombustible->tipoCombustible?->nombre ?? ''), 'UTF-8'), 'DIESEL')
+                    || str_contains(mb_strtoupper((string) ($valeCombustible->tipoCombustible?->nombre ?? ''), 'UTF-8'), 'DIÉSEL');
+            @endphp
+
+            @if($esDieselVale)
+                <div class="col-md-6 mb-3">
+                    <strong>Estación de servicio</strong>
+                    <div>{{ $valeCombustible->estacionServicio?->nombre ?? '—' }}</div>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <strong>Lugar de entrega</strong>
+                    <div>{{ $valeCombustible->lugarEntrega?->nombre ?? '—' }}</div>
+                </div>
+            @else
+                <div class="col-md-6 mb-3">
+                    <strong>Estación de servicio</strong>
+                    <div>{{ $valeCombustible->estacionServicio?->nombre ?? 'Pendiente' }}</div>
+                </div>
+            @endif
 
 
             {{-- CANTIDAD DE LITROS --}}
@@ -430,21 +444,33 @@
 
             </div>
 
+{{-- RESPONSABLE DEL REGISTRO DE USO --}}
+<div class="col-md-6 mb-3">
 
-            {{-- REGISTRADO POR --}}
-            <div class="col-md-6 mb-3">
+    <strong>
+        {{ $valeCombustible->entrega_policia_id
+            ? 'Uso registrado por'
+            : 'Emitido por' }}
+    </strong>
 
-                <strong>Registrado por</strong>
+    <div>
+        @if($valeCombustible->entrega_policia_id)
 
-                <div>
+            {{ $valeCombustible->usuarioRegistroUso?->nombre ?? 'Pendiente' }}
+            {{ $valeCombustible->usuarioRegistroUso?->apellido ?? '' }}
 
-                    {{ $valeCombustible->usuario?->nombre ?? '-' }}
+        @else
 
-                    {{ $valeCombustible->usuario?->apellido ?? '' }}
-
-                </div>
-
+            {{ $valeCombustible->usuario?->nombre ?? '-' }}
+            {{ $valeCombustible->usuario?->apellido ?? '' }}
+            <div class="text-muted small mt-1">
+                Emitido el: {{ $valeCombustible->created_at?->format('d/m/Y H:i') ?? '—' }}
             </div>
+
+        @endif
+    </div>
+
+</div>
 
 
             {{-- OBSERVACIÓN --}}
@@ -562,6 +588,7 @@
                             '¿Confirma la anulación de este vale? El número no podrá reutilizarse.'
                         )">
 
+                    <i class="bi bi-slash-circle me-1" aria-hidden="true"></i>
                     Confirmar anulación
 
                 </button>
@@ -668,10 +695,7 @@
                                 <h5 class="modal-title">
 
                                     Anular vale N.º
-                                    {{ sprintf(
-                                        '%06d',
-                                        (int) $valeCombustible->numero_vale
-                                    ) }}
+                                    {{ $valeCombustible->numero_vale_formateado }}
 
                                 </h5>
 
@@ -729,10 +753,13 @@
 
                             <div class="modal-footer">
 
-                                <button type="button"
-                                        class="btn btn-outline-secondary"
-                                        data-bs-dismiss="modal">
+                                <button
+                                    type="button"
+                                    class="btn btn-outline-secondary"
+                                    data-bs-dismiss="modal"
+                                >
 
+                                    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
                                     Cancelar
 
                                 </button>

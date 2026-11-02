@@ -131,6 +131,7 @@
                                     data-placa="{{ $vehiculo->placa ?? '' }}"
                                     data-tipo="{{ $vehiculo->tipo ?? '' }}"
                                     data-unidad="{{ $vehiculo->unidad?->nombre ?? '' }}"
+                                    data-detalle="{{ $vehiculo->detalle_asignacion_predeterminado ?? '' }}"
 
                                     data-ap="{{ $ap?->codigo ?? '' }}"
                                     data-ff="{{ $ff?->codigo ?? '' }}"
@@ -238,6 +239,42 @@
                             <strong id="datoDetalle"></strong>
                         </div>
 
+                        <div class="mt-3">
+                            <label for="detalle_asignacion" class="form-label">
+                                Detalle de asignación
+                                @if($valeCombustible->estado === 'ENTREGADO')
+                                    *
+                                @endif
+                            </label>
+
+                            <textarea
+                                name="detalle_asignacion"
+                                id="detalle_asignacion"
+                                rows="2"
+                                maxlength="1000"
+                                @if($valeCombustible->estado === 'ENTREGADO')
+                                    required
+                                @endif
+                                data-preserve-empty="{{ $valeCombustible->estado === 'UTILIZADO' && trim((string) $valeCombustible->detalle_asignacion) === '' ? '1' : '0' }}"
+                                class="form-control @error('detalle_asignacion') is-invalid @enderror"
+                                placeholder="SIN DETALLE CONFIGURADO"
+                            >{{ old(
+                                'detalle_asignacion',
+                                $valeCombustible->detalle_asignacion
+                                    ?? ($valeCombustible->estado === 'ENTREGADO'
+                                        ? ($valeCombustible->vehiculo?->detalle_asignacion_predeterminado ?? '')
+                                        : '')
+                            ) }}</textarea>
+
+                            @error('detalle_asignacion')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+
+                            <div class="form-text">
+                                Puede ajustar el detalle para este vale. Esto no modifica el detalle predeterminado del vehículo.
+                            </div>
+                        </div>
+
                         <div id="sinAP"
                              class="alert alert-warning mt-3 mb-0 d-none">
 
@@ -330,6 +367,9 @@
                     <div class="row g-3 mb-3">
 
     {{-- TIPO DE COMBUSTIBLE --}}
+    @if($valeCombustible->tipo_combustible_id)
+        <input type="hidden" name="tipo_combustible_id" value="{{ $valeCombustible->tipo_combustible_id }}">
+    @endif
     <div class="col-md-6">
 
         <label for="tipo_combustible_id"
@@ -339,6 +379,7 @@
 
         <select name="tipo_combustible_id"
                 id="tipo_combustible_id"
+                 @if($valeCombustible->tipo_combustible_id) disabled @endif
                 class="form-select @error('tipo_combustible_id') is-invalid @enderror"
                 required>
 
@@ -610,6 +651,7 @@
                         <a href="{{ route('entregas-policia.show', $valeCombustible->entrega_policia_id) }}"
                            class="btn btn-outline-secondary">
 
+                            <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
                             Cancelar
                         </a>
 
@@ -638,6 +680,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const panel = document.getElementById('datosVehiculo');
     const sinAP = document.getElementById('sinAP');
     const btnGuardar = document.getElementById('btnGuardar');
+    const detalleAsignacion = document.getElementById('detalle_asignacion');
 
     const litros = document.getElementById('cantidad_litros');
     const precio = document.getElementById('precio_unitario');
@@ -654,7 +697,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    function actualizarVehiculo() {
+    function actualizarVehiculo(cambiarDetalle = false) {
 
         const opcion = select?.selectedOptions[0];
 
@@ -683,17 +726,20 @@ document.addEventListener('DOMContentLoaded', function () {
         colocar('datoOF', opcion.dataset.of);
 
 
-        let detalle = 'ASIGNADO A';
-
-        if (opcion.dataset.tipo) {
-            detalle += ' ' + opcion.dataset.tipo.toUpperCase();
+        if (
+            detalleAsignacion
+            && (cambiarDetalle || (
+                !detalleAsignacion.value.trim()
+                && detalleAsignacion.dataset.preserveEmpty !== '1'
+            ))
+        ) {
+            detalleAsignacion.value = opcion.dataset.detalle || '';
         }
 
-        if (opcion.dataset.unidad) {
-            detalle += ' DE ' + opcion.dataset.unidad.toUpperCase();
-        }
-
-        colocar('datoDetalle', detalle);
+        colocar(
+            'datoDetalle',
+            detalleAsignacion?.value || 'SIN DETALLE CONFIGURADO'
+        );
 
 
         const tieneAP = opcion.dataset.tieneAp === '1';
@@ -731,7 +777,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
 
-    select?.addEventListener('change', actualizarVehiculo);
+    select?.addEventListener('change', () => actualizarVehiculo(true));
+    detalleAsignacion?.addEventListener('input', () => {
+        colocar(
+            'datoDetalle',
+            detalleAsignacion.value || 'SIN DETALLE CONFIGURADO'
+        );
+    });
 
     litros?.addEventListener('input', calcularTotal);
     precio?.addEventListener('input', calcularTotal);

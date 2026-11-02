@@ -168,7 +168,8 @@
 
                                 <a href="{{ route('fuentes-financiamiento.show', $fuenteFinanciamiento) }}"
                                    class="btn btn-sm btn-info text-white"
-                                   title="Ver">
+                                   title="Ver"
+                                   aria-label="Ver fuente de financiamiento">
 
                                     <i class="bi bi-eye"></i>
 
@@ -176,7 +177,8 @@
 
                                 <a href="{{ route('fuentes-financiamiento.edit', $fuenteFinanciamiento) }}"
                                    class="btn btn-sm btn-warning"
-                                   title="Editar">
+                                   title="Editar"
+                                   aria-label="Editar fuente de financiamiento">
 
                                     <i class="bi bi-pencil"></i>
 

@@ -8,10 +8,12 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('numeraciones_vales', function (Blueprint $table) {
-            $table->integer('anio')->primary();
-            $table->integer('ultimo_numero')->default(0);
-        });
+        if (!Schema::hasTable('numeraciones_vales')) {
+            Schema::create('numeraciones_vales', function (Blueprint $table) {
+                $table->integer('anio')->primary();
+                $table->integer('ultimo_numero')->default(0);
+            });
+        }
     }
 
     public function down(): void

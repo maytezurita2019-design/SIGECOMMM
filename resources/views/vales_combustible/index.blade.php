@@ -231,11 +231,13 @@
 @section('content')
 
 @php
-    $nombreRol = mb_strtoupper(auth()->user()->rol->nombre ?? '');
+    $nombreRol = mb_strtoupper(trim(auth()->user()->rol->nombre ?? ''));
 
-    $esAdministrador = str_contains($nombreRol, 'ADMIN');
-    $esAuxiliar = str_contains($nombreRol, 'AUX');
-    $puedeOperar = $esAdministrador || $esAuxiliar;
+    $puedeOperar = in_array(
+        $nombreRol,
+        ['TECNICO_I', 'TECNICO_II'],
+        true
+    );
 
     $tipoActual = request('tipo', 'GAMS');
 
@@ -275,7 +277,9 @@
     @if($puedeOperar)
         <div class="d-flex gap-2 flex-wrap no-print">
 
-            <a href="{{ route('vales-combustible.create') }}"
+            <a href="{{ route('vales-combustible.create', [
+    'combustible' => request('combustible')
+]) }}"
                class="btn btn-sig btn-principal">
 
                 <i class="bi bi-plus-circle me-1"></i>
@@ -358,6 +362,7 @@
 
                 <a href="{{ route('vales-combustible.index') }}"
                    class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
                     Limpiar
                 </a>
 
@@ -451,7 +456,7 @@
                         </td>
 
                         <td class="fw-bold">
-                            {{ $v->numero_vale }}
+                            {{ $v->numero_vale_formateado }}
                         </td>
 
                         <td>
@@ -534,7 +539,7 @@
                 <div>
 
                     <div class="vale-num">
-                        Vale {{ $v->numero_vale }}
+                        Vale {{ $v->numero_vale_formateado }}
                     </div>
 
                     <small class="text-muted">
@@ -611,4 +616,3 @@
 </div>
 
 @endsection
-

@@ -8,9 +8,30 @@ use Illuminate\Validation\Rule;
 
 class OrganismoFinanciadorController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $organismos = OrganismoFinanciador::orderBy('codigo')->get();
+        $filtros = $request->validate([
+            'buscar' => ['nullable', 'string', 'max:255'],
+            'estado' => ['nullable', 'in:activo,inactivo'],
+        ]);
+
+        $consulta = OrganismoFinanciador::query()->orderBy('codigo');
+
+        if (!empty($filtros['buscar'])) {
+            $busqueda = trim($filtros['buscar']);
+
+            $consulta->where(function ($subconsulta) use ($busqueda) {
+                $coincidencia = '%' . $busqueda . '%';
+                $subconsulta->where('codigo', 'ILIKE', $coincidencia)
+                    ->orWhere('nombre', 'ILIKE', $coincidencia);
+            });
+        }
+
+        if (isset($filtros['estado']) && $filtros['estado'] !== '') {
+            $consulta->where('estado', $filtros['estado'] === 'activo');
+        }
+
+        $organismos = $consulta->get();
 
         return view('organismos_financiadores.index', compact('organismos'));
     }

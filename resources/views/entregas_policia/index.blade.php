@@ -428,8 +428,10 @@
                             <a
                                 href="{{ route('entregas-policia.show', $e) }}"
                                 class="btn btn-sm btn-outline-success"
+                                title="Ver entrega"
+                                aria-label="Ver entrega"
                             >
-                                <i class="bi bi-eye me-1"></i>
+                                <i class="bi bi-eye me-1" aria-hidden="true"></i>
                                 Ver entrega
                             </a>
 

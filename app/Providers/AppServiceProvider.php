@@ -28,7 +28,6 @@ class AppServiceProvider extends ServiceProvider
 
         app()->setLocale('es');
 
-
         /*
         |--------------------------------------------------------------------------
         | PERMISOS DE INTERFAZ
@@ -39,61 +38,85 @@ class AppServiceProvider extends ServiceProvider
         |
         */
 
-        Gate::define('administrador', function ($usuario) {
+        $esRol = function ($usuario, array $roles): bool {
 
             $rol = mb_strtoupper(
-                $usuario->rol->nombre ?? ''
+                trim((string) ($usuario->rol?->nombre ?? ''))
             );
 
-            return str_contains($rol, 'ADMIN');
+            return in_array($rol, $roles, true);
+        };
+
+        Gate::define('administrador', fn ($usuario) =>
+            $esRol($usuario, ['ADMINISTRADOR'])
+        );
+
+        Gate::define('puede-operar', fn ($usuario) =>
+            $esRol($usuario, ['TECNICO_I', 'TECNICO_II'])
+        );
+
+        Gate::define('combustible-consultar-vehiculos', fn ($usuario) =>
+            $esRol($usuario, ['TECNICO_I', 'TECNICO_II'])
+        );
+
+        Gate::define('combustible-operar', fn ($usuario) =>
+            $esRol($usuario, ['TECNICO_I', 'TECNICO_II'])
+        );
+
+        Gate::define('combustible-lotes', fn ($usuario) =>
+            $esRol($usuario, ['TECNICO_I'])
+        );
+
+        Gate::define('combustible-configurar', fn ($usuario) =>
+            $esRol($usuario, ['TECNICO_I'])
+        );
+
+        Gate::define('combustible-auditoria', fn ($usuario) =>
+            $esRol($usuario, ['ADMINISTRADOR', 'TECNICO_I'])
+        );
+
+        Gate::define('combustible-reportes', fn ($usuario) =>
+            $esRol($usuario, [
+                'ADMINISTRADOR',
+                'TECNICO_I',
+                'TECNICO_II'
+            ])
+        );
+
+        Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
+
+            if (!auth()->check()) {
+                return;
+            }
+
+            if (!auth()->user()->can('administrador')) {
+                return;
+            }
+
+            $pendientes = 0;
+
+            if (Schema::hasTable('solicitudes_contrasena')) {
+                $pendientes = \App\Models\SolicitudContrasena::where(
+                    'estado',
+                    'pendiente'
+                )->count();
+            }
+
+            $item = [
+                'text' => 'Solicitudes',
+                'route' => 'solicitudes-contrasena.index',
+                'icon' => 'bi bi-bell-fill',
+                'topnav_right' => true,
+            ];
+
+            if ($pendientes > 0) {
+                $item['label'] = $pendientes;
+                $item['label_color'] = 'danger';
+            }
+
+            $event->menu->add($item);
         });
 
-
-        Gate::define('puede-operar', function ($usuario) {
-
-            $rol = mb_strtoupper(
-                $usuario->rol->nombre ?? ''
-            );
-
-            return str_contains($rol, 'ADMIN')
-                || str_contains($rol, 'AUX');
-        });
-
-Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
-
-    if (!auth()->check()) {
-        return;
-    }
-
-    $rol = mb_strtoupper(auth()->user()->rol->nombre ?? '');
-
-    if (!str_contains($rol, 'ADMIN')) {
-        return;
-    }
-
-    $pendientes = 0;
-
-    if (Schema::hasTable('solicitudes_contrasena')) {
-        $pendientes = \App\Models\SolicitudContrasena::where(
-            'estado',
-            'pendiente'
-        )->count();
-    }
-
-    $item = [
-        'text' => 'Solicitudes',
-        'route' => 'solicitudes-contrasena.index',
-        'icon' => 'bi bi-bell-fill',
-        'topnav_right' => true,
-    ];
-
-    if ($pendientes > 0) {
-        $item['label'] = $pendientes;
-        $item['label_color'] = 'danger';
-    }
-
-    $event->menu->add($item);
-});
         /*
         |--------------------------------------------------------------------------
         | AUDITORÍA
@@ -111,12 +134,11 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
             \App\Models\OrganismoFinanciador::class,
             \App\Models\AperturaProgramatica::class,
             \App\Models\LoteVale::class,
-            \App\Models\ValeCombustible::class,
+            // ValeCombustible se audita en su propio modelo para evitar duplicados.
             \App\Models\Usuario::class,
             \App\Models\Rol::class,
 
         ];
-
 
         $limpiar = static function (array $datos): array {
 
@@ -139,7 +161,6 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
             return $datos;
         };
 
-
         foreach ($modelosAuditados as $modelo) {
 
             /*
@@ -157,7 +178,6 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
                 ) {
                     return;
                 }
-
 
                 \App\Models\Auditoria::create([
 
@@ -181,7 +201,6 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
 
             });
 
-
             /*
             |--------------------------------------------------------------------------
             | ACTUALIZAR
@@ -198,17 +217,13 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
                     return;
                 }
 
-
                 $cambios = $m->getChanges();
-
 
                 if (!$cambios) {
                     return;
                 }
 
-
                 $anteriores = [];
-
 
                 foreach (array_keys($cambios) as $k) {
 
@@ -216,7 +231,6 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
                         $m->getOriginal($k);
 
                 }
-
 
                 \App\Models\Auditoria::create([
 
@@ -244,7 +258,6 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
 
             });
 
-
             /*
             |--------------------------------------------------------------------------
             | ELIMINAR
@@ -260,7 +273,6 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
                 ) {
                     return;
                 }
-
 
                 \App\Models\Auditoria::create([
 
@@ -287,3 +299,5 @@ Event::listen(BuildingMenu::class, function (BuildingMenu $event) {
         }
     }
 }
+
+

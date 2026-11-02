@@ -8,7 +8,9 @@ use App\Models\{
     Vehiculo,
     AperturaProgramatica,
     TipoCombustible,
-    EstacionServicio
+    EstacionServicio,
+    LugarEntrega,
+    NumeracionVale
 };
 
 use Illuminate\Http\Request;
@@ -17,6 +19,99 @@ use Illuminate\Validation\ValidationException;
 
 class ValeCombustibleController extends Controller
 {
+    private function esDiesel(TipoCombustible $tipo): bool
+    {
+        $nombre = mb_strtoupper(trim($tipo->nombre), 'UTF-8');
+
+        return str_contains($nombre, 'DIESEL') || str_contains($nombre, 'DIÉSEL');
+    }
+
+    private function validarUbicacionGams(
+        TipoCombustible $tipo,
+        array $datos,
+        ?ValeCombustible $valeExistente = null,
+        bool $emision = false
+    ): array {
+        $idLugar = $datos['lugar_entrega_id'] ?? $valeExistente?->lugar_entrega_id;
+        $idEstacion = $datos['estacion_servicio_id'] ?? $valeExistente?->estacion_servicio_id;
+
+        if ($this->esDiesel($tipo)) {
+            if ($emision && !$idEstacion) {
+                throw ValidationException::withMessages([
+                    'estacion_servicio_id' => 'Seleccione una estación de servicio activa.',
+                ]);
+            }
+
+            if ($emision && !$idLugar) {
+                throw ValidationException::withMessages([
+                    'lugar_entrega_id' => 'Seleccione un lugar de entrega activo.',
+                ]);
+            }
+
+            if ($idEstacion) {
+                $estacion = EstacionServicio::find($idEstacion);
+                if (!$estacion) {
+                    throw ValidationException::withMessages([
+                        'estacion_servicio_id' => 'La estación de servicio seleccionada no existe.',
+                    ]);
+                }
+
+                if (!$estacion->estado && (int) $idEstacion !== (int) $valeExistente?->estacion_servicio_id) {
+                    throw ValidationException::withMessages([
+                        'estacion_servicio_id' => 'Seleccione una estación activa.',
+                    ]);
+                }
+            }
+
+            if ($idLugar) {
+                $lugar = LugarEntrega::find($idLugar);
+                if (!$lugar) {
+                    throw ValidationException::withMessages([
+                        'lugar_entrega_id' => 'El lugar de entrega seleccionado no existe.',
+                    ]);
+                }
+
+                if (!$lugar->estado && (int) $idLugar !== (int) $valeExistente?->lugar_entrega_id) {
+                    throw ValidationException::withMessages([
+                        'lugar_entrega_id' => 'Seleccione un lugar de entrega activo.',
+                    ]);
+                }
+            }
+
+            return ['estacion_servicio_id' => $idEstacion, 'lugar_entrega_id' => $idLugar];
+        }
+
+        $esGasolina = str_contains(mb_strtoupper($tipo->nombre, 'UTF-8'), 'GASOLINA');
+        if (!$esGasolina) {
+            throw ValidationException::withMessages([
+                'tipo_combustible_id' => 'GAMS solo puede emitir vales de gasolina o diésel.',
+            ]);
+        }
+
+        if ($emision && !$idEstacion) {
+            throw ValidationException::withMessages([
+                'estacion_servicio_id' => 'Seleccione una estación de servicio activa.',
+            ]);
+        }
+
+        if ($idEstacion) {
+            $estacion = EstacionServicio::find($idEstacion);
+            if (!$estacion) {
+                throw ValidationException::withMessages([
+                    'estacion_servicio_id' => 'La estación de servicio seleccionada no existe.',
+                ]);
+            }
+
+            if (!$estacion->estado && (int) $idEstacion !== (int) $valeExistente?->estacion_servicio_id) {
+                throw ValidationException::withMessages([
+                    'estacion_servicio_id' => 'Seleccione una estación activa.',
+                ]);
+            }
+        }
+
+        return ['estacion_servicio_id' => $idEstacion, 'lugar_entrega_id' => null];
+    }
+
     private function normalizarDecimales(Request $request): void
     {
         foreach (['cantidad_litros', 'precio_unitario'] as $campo) {
@@ -31,6 +126,104 @@ class ValeCombustibleController extends Controller
             }
         }
     }
+        private function validarKilometrajeAnterior(
+    int $vehiculoId,
+    $kilometrajeNuevo,
+    ?int $valeIgnorarId = null
+): void {
+
+    // Si no se ingresó kilometraje, no se realiza comparación.
+    if ($kilometrajeNuevo === null || trim((string) $kilometrajeNuevo) === '') {
+        return;
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Normalizar kilometraje ingresado
+    |--------------------------------------------------------------------------
+    */
+
+    $nuevo = str_replace(
+        ['.', ',', ' '],
+        '',
+        trim((string) $kilometrajeNuevo)
+    );
+
+    if (!is_numeric($nuevo)) {
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'kilometraje' =>
+                'El kilometraje debe contener solamente números.',
+        ]);
+    }
+
+    $nuevo = (int) $nuevo;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Buscar último kilometraje DEL MISMO VEHÍCULO
+    |--------------------------------------------------------------------------
+    */
+
+    $consulta = ValeCombustible::query()
+        ->where('vehiculo_id', $vehiculoId)
+        ->whereNotNull('kilometraje')
+        ->where('kilometraje', '<>', '');
+
+    /*
+     * Al editar un vale no debe compararse contra sí mismo.
+     */
+    if ($valeIgnorarId !== null) {
+        $consulta->where('id', '<>', $valeIgnorarId);
+    }
+
+    $ultimoVale = $consulta
+        ->orderByDesc('fecha')
+        ->orderByDesc('id')
+        ->first();
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Si es el primer registro del vehículo
+    |--------------------------------------------------------------------------
+    */
+
+    if (!$ultimoVale) {
+        return;
+    }
+
+    $anterior = str_replace(
+        ['.', ',', ' '],
+        '',
+        trim((string) $ultimoVale->kilometraje)
+    );
+
+    if (!is_numeric($anterior)) {
+        return;
+    }
+
+    $anterior = (int) $anterior;
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Comparar
+    |--------------------------------------------------------------------------
+    */
+
+    if ($nuevo < $anterior) {
+
+        throw \Illuminate\Validation\ValidationException::withMessages([
+            'kilometraje' =>
+                'El kilometraje ingresado (' .
+                number_format($nuevo, 0, ',', '.') .
+                ' km) es menor al último kilometraje registrado para este vehículo (' .
+                number_format($anterior, 0, ',', '.') .
+                ' km). Verifique el dato antes de continuar.',
+        ]);
+    }
+}
 
     private function calcularTotal(array $datos): ?string
     {
@@ -79,18 +272,38 @@ class ValeCombustibleController extends Controller
 
             'por_pagina' =>
                 'nullable|integer|in:10,30,50,100',
+                'combustible' =>
+    'nullable|in:gasolina,diesel',
         ]);
 
         $consulta = ValeCombustible::with([
             'periodo',
             'tipoCombustible',
+            'serieCorrelativa',
             'estacionServicio',
+            'lugarEntrega',
             'loteVale',
             'vehiculo.unidad',
             'aperturaProgramatica',
             'usuario',
             'entregaPolicia'
         ]);
+        
+$combustible = $request->input('combustible');
+
+if ($combustible === 'gasolina') {
+    $consulta->whereHas('tipoCombustible', function ($q) {
+        $q->whereRaw('UPPER(nombre) LIKE ?', ['%GASOLINA%']);
+    });
+} elseif ($combustible === 'diesel') {
+    $consulta->whereHas('tipoCombustible', function ($q) {
+        $q->where(function ($sub) {
+            $sub->whereRaw('UPPER(nombre) LIKE ?', ['%DIESEL%'])
+                ->orWhereRaw('UPPER(nombre) LIKE ?', ['%DIÉSEL%']);
+        });
+    });
+}
+
 
         if ($request->filled('buscar')) {
 
@@ -182,8 +395,14 @@ class ValeCombustibleController extends Controller
     |--------------------------------------------------------------------------
     */
 
-   public function create()
+   public function create(Request $request)
 {
+
+$request->validate([
+    'combustible' => 'nullable|in:gasolina,diesel',
+]);
+
+$combustibleSeleccionado = $request->query('combustible');
     $vehiculos = Vehiculo::with([
         'unidad',
         'aperturaProgramatica.fuenteFinanciamiento',
@@ -193,30 +412,120 @@ class ValeCombustibleController extends Controller
         ->orderBy('codigo')
         ->get();
 
-    $serie = DB::table('series_vales')
-        ->where('estado', true)
-        ->orderByDesc('id')
-        ->first();
+    $tiposCombustible = TipoCombustible::where('estado', true)
+        ->orderBy('nombre')
+        ->get();
 
-    if (!$serie) {
-        throw new \RuntimeException(
-            'No existe una serie de vales activa.'
-        );
+    $anio = (int) date('Y');
+    $numerosSugeridos = [];
+    $numerosFormateadosSugeridos = [];
+    $erroresSugeridos = [];
+    $codigosSerieSugeridos = [];
+    $estadosSerieSugeridos = [];
+    foreach ($tiposCombustible as $tipo) {
+        $codigo = NumeracionVale::codigoSerie(null, 'GAMS', $tipo->nombre);
+        if ($codigo !== null) {
+            $codigosSerieSugeridos[$tipo->id] = $codigo;
+            try {
+                $numero = NumeracionVale::siguiente($anio, $codigo);
+                $estadoSerie = NumeracionVale::estado($codigo, $anio) ?? 'ACTIVA';
+                $numerosSugeridos[$tipo->id] = $numero;
+                $estadosSerieSugeridos[$tipo->id] = $estadoSerie;
+                $numerosFormateadosSugeridos[$tipo->id] = NumeracionVale::formatearNumero(
+                    $codigo,
+                    $anio,
+                    $numero
+                );
+                if ($estadoSerie !== 'ACTIVA') {
+                    $erroresSugeridos[$codigo] = "La serie {$codigo} del año {$anio} está EN_CONFIGURACION. TECNICO_I debe activarla antes de emitir.";
+                }
+            } catch (\RuntimeException $exception) {
+                $erroresSugeridos[$codigo] = $this->mensajeSerieNoConfigurada($exception);
+            }
+        }
     }
 
-    $numeroSugerido = sprintf(
-        '%06d',
-        ((int) $serie->ultimo_numero) + 1
-    );
+    $tipoGasolinaId = array_search('GAMS-GAS', $codigosSerieSugeridos, true);
+    $numeroSugerido = $tipoGasolinaId === false
+        ? ''
+        : ($numerosFormateadosSugeridos[$tipoGasolinaId] ?? '');
+
+    $estacionesServicio = EstacionServicio::where('estado', true)
+        ->orderBy('nombre')
+        ->get();
+
+    $lugaresEntrega = LugarEntrega::where('estado', true)
+        ->orderBy('nombre')
+        ->get();
 
     return view(
         'vales_combustible.create',
         compact(
             'vehiculos',
-            'numeroSugerido'
+            'anio',
+            'numeroSugerido',
+            'tiposCombustible',
+            'estacionesServicio',
+            'lugaresEntrega',
+            'numerosSugeridos',
+            'numerosFormateadosSugeridos',
+            'erroresSugeridos',
+            'estadosSerieSugeridos',
+            'combustibleSeleccionado',
+            'codigosSerieSugeridos'
         )
     );
 }
+
+    public function previsualizarSerie(Request $request)
+    {
+        $datos = $request->validate([
+            'anio' => ['required', 'integer', 'between:2026,' . ((int) now()->year + 1)],
+        ]);
+        $anio = (int) $datos['anio'];
+        $series = [];
+
+        foreach (['GAMS-GAS', 'GAMS-DIE'] as $codigo) {
+            try {
+                $numero = NumeracionVale::siguiente($anio, $codigo);
+                $series[$codigo] = [
+                    'disponible' => true,
+                    'numero' => $numero,
+                    'formateado' => NumeracionVale::formatearNumero($codigo, $anio, $numero),
+                    'estado' => NumeracionVale::estado($codigo, $anio) ?? 'ACTIVA',
+                    'activa' => NumeracionVale::estado($codigo, $anio) === 'ACTIVA',
+                ];
+                if (!$series[$codigo]['activa']) {
+                    $series[$codigo]['mensaje'] = "La serie {$codigo} del año {$anio} está EN_CONFIGURACION. TECNICO_I debe activarla antes de emitir.";
+                }
+            } catch (\RuntimeException $exception) {
+                $series[$codigo] = [
+                    'disponible' => false,
+                    'mensaje' => $this->mensajeSerieNoConfigurada($exception),
+                ];
+            }
+        }
+
+        return response()->json([
+            'anio' => $anio,
+            'series' => $series,
+        ]);
+    }
+
+    private function mensajeSerieNoConfigurada(\RuntimeException $exception): string
+    {
+        if (
+            str_contains($exception->getMessage(), 'requiere configuración')
+            || str_contains($exception->getMessage(), 'Falta la serie histórica')
+        ) {
+            return 'Las series correlativas del año seleccionado todavía no han sido configuradas. Solicite al TECNICO_I iniciar el nuevo año.';
+        }
+        if (str_contains($exception->getMessage(), 'EN_CONFIGURACION')) {
+            return $exception->getMessage();
+        }
+
+        return $exception->getMessage();
+    }
     /*
     |--------------------------------------------------------------------------
     | GUARDAR / EMITIR VALE GAMS
@@ -229,9 +538,18 @@ class ValeCombustibleController extends Controller
 
     $datos = $request->validate([
         'fecha' => 'required|date|before_or_equal:today',
+        'tipo_combustible_id' => 'required|integer|exists:tipos_combustible,id',
+        'estacion_servicio_id' => 'nullable|integer|exists:estaciones_servicio,id',
+        'lugar_entrega_id' => 'nullable|integer|exists:lugares_entrega,id',
 
         'vehiculo_id' =>
             'required|exists:vehiculos,id,estado,1',
+
+        'detalle_asignacion' => [
+            'required',
+            'string',
+            'max:1000',
+        ],
 
         'kilometraje' => [
     'nullable',
@@ -239,6 +557,33 @@ class ValeCombustibleController extends Controller
     'max:50',
 ],
     ]);
+
+    if (!TipoCombustible::whereKey($datos['tipo_combustible_id'])->where('estado', true)->exists()) {
+        throw ValidationException::withMessages(['tipo_combustible_id' => 'Seleccione un combustible activo.']);
+    }
+
+    $this->validarKilometrajeAnterior(
+    (int) $datos['vehiculo_id'],
+    $datos['kilometraje'] ?? null
+);
+
+    $tipoCombustible = TipoCombustible::findOrFail(
+        $datos['tipo_combustible_id']
+    );
+    if (
+        !str_contains(mb_strtoupper($tipoCombustible->nombre), 'GASOLINA')
+        && !str_contains(mb_strtoupper($tipoCombustible->nombre), 'DIESEL')
+        && !str_contains(mb_strtoupper($tipoCombustible->nombre), 'DIÉSEL')
+    ) {
+        throw ValidationException::withMessages([
+            'tipo_combustible_id' => 'GAMS solo puede emitir vales de gasolina o diésel.',
+        ]);
+    }
+
+    $datos = array_merge(
+        $datos,
+        $this->validarUbicacionGams($tipoCombustible, $datos, emision: true)
+    );
 
     $vehiculo = Vehiculo::with([
         'unidad',
@@ -274,7 +619,7 @@ class ValeCombustibleController extends Controller
 
     $datos['observacion'] = null;
 
-    $vale = DB::transaction(function () use ($datos) {
+    $vale = DB::transaction(function () use ($datos, $tipoCombustible) {
 
 
             $anio = (int) date(
@@ -292,9 +637,27 @@ class ValeCombustibleController extends Controller
 |
 */
 
-$serie = \App\Models\NumeracionVale::bloquear(
-    $anio
+$codigoSerie = NumeracionVale::codigoSerie(
+    null,
+    'GAMS',
+    $tipoCombustible->nombre
 );
+
+try {
+    $serie = NumeracionVale::bloquear($anio, $codigoSerie);
+} catch (\RuntimeException $exception) {
+    if (
+        str_contains($exception->getMessage(), 'no está configurada')
+        || str_contains($exception->getMessage(), 'Falta la serie histórica')
+        || str_contains($exception->getMessage(), 'EN_CONFIGURACION')
+    ) {
+        throw ValidationException::withMessages([
+            'fecha' => $this->mensajeSerieNoConfigurada($exception),
+        ]);
+    }
+
+    throw $exception;
+}
 
 /*
 |--------------------------------------------------------------------------
@@ -319,7 +682,7 @@ $numero = ((int) $serie->ultimo_numero) + 1;
 */
 
 $existe = ValeCombustible::query()
-    ->where('serie_vale_id', $serie->id)
+    ->where('serie_correlativa_id', $serie->id)
     ->where('numero_vale', $numero)
     ->exists();
 
@@ -327,7 +690,11 @@ if ($existe) {
     throw ValidationException::withMessages([
         'numero_vale' =>
             'El número de vale ' .
-            sprintf('%06d', $numero) .
+            NumeracionVale::formatear(
+    $codigoSerie,
+    $anio,
+    $numero
+) .
             ' ya existe en la serie activa.',
     ]);
 }
@@ -338,27 +705,30 @@ if ($existe) {
 |--------------------------------------------------------------------------
 */
 
-DB::table('series_vales')
-    ->where('id', $serie->id)
-    ->update([
-        'ultimo_numero' => $numero,
-        'updated_at' => now(),
-    ]);
+NumeracionVale::avanzar(
+    $serie,
+    $numero
+);
 
 /*
 |--------------------------------------------------------------------------
 | CREAR VALE GAMS
 |--------------------------------------------------------------------------
 |
-| El vale queda asociado a la serie activa.
+| El vale se asocia a la serie correlativa nueva. La FK histórica
+| serie_vale_id se deja intacta para los registros anteriores.
 |
 */
 
 return ValeCombustible::create([
-    'serie_vale_id' => $serie->id,
+    'serie_vale_id' => null,
+    'serie_correlativa_id' => $serie->id,
     'numero_vale' => $numero,
     'anio' => $anio,
     'fecha' => $datos['fecha'],
+    'tipo_combustible_id' => $datos['tipo_combustible_id'],
+    'estacion_servicio_id' => $datos['estacion_servicio_id'],
+    'lugar_entrega_id' => $datos['lugar_entrega_id'],
 
     'vehiculo_id' => $datos['vehiculo_id'],
 
@@ -366,10 +736,13 @@ return ValeCombustible::create([
         $datos['apertura_programatica_id'],
 
     'kilometraje' =>
-        $datos['kilometraje'],
+        $datos['kilometraje'] ?? null,
 
     'observacion' =>
         $datos['observacion'] ?? null,
+
+    'detalle_asignacion' =>
+        $datos['detalle_asignacion'],
 
     'usuario_id' =>
         auth()->id(),
@@ -410,7 +783,14 @@ return redirect()
     ->with(
         'success',
         'Vale GAMS N.º ' .
-        sprintf('%06d', (int) $vale->numero_vale) .
+NumeracionVale::formatear(
+    $vale->tipoCombustible &&
+    str_contains(mb_strtoupper($vale->tipoCombustible->nombre), 'GASOLINA')
+        ? 'GAMS-GAS'
+        : 'GAMS-DIE',
+    (int) $vale->anio,
+    (int) $vale->numero_vale
+).
         ' emitido correctamente.'
     );
     }
@@ -428,7 +808,9 @@ return redirect()
             'loteVale',
             'periodo',
             'tipoCombustible',
+            'serieCorrelativa',
             'estacionServicio',
+            'lugarEntrega',
             'vehiculo.unidad',
             'aperturaProgramatica',
             'usuario'
@@ -479,12 +861,16 @@ return redirect()
             'aperturaProgramatica',
             'usuario',
             'tipoCombustible',
-            'estacionServicio'
+            'serieCorrelativa',
+            'estacionServicio',
+            'lugarEntrega'
         ]);
+
+        $numeroValeFormateado = $valeCombustible->numero_vale_formateado;
 
         return view(
             'vales_combustible.imprimir',
-            compact('valeCombustible')
+            compact('valeCombustible', 'numeroValeFormateado')
         );
     }
 
@@ -578,7 +964,9 @@ return redirect()
         'vehiculo.aperturaProgramatica.fuenteFinanciamiento',
         'vehiculo.aperturaProgramatica.organismoFinanciador',
         'tipoCombustible',
+        'serieCorrelativa',
         'estacionServicio',
+        'lugarEntrega',
     ]);
 
     $vehiculos = Vehiculo::with([
@@ -604,7 +992,17 @@ return redirect()
         ->orderBy('nombre')
         ->get();
 
+    $lugaresEntrega = LugarEntrega::where('estado', true)
+        ->when($valeCombustible->lugar_entrega_id, function ($query) use ($valeCombustible) {
+            $query->orWhere('id', $valeCombustible->lugar_entrega_id);
+        })
+        ->orderBy('nombre')
+        ->get();
+
     $estacionesServicio = EstacionServicio::where('estado', true)
+        ->when($valeCombustible->estacion_servicio_id, function ($query) use ($valeCombustible) {
+            $query->orWhere('id', $valeCombustible->estacion_servicio_id);
+        })
         ->orderBy('nombre')
         ->get();
 
@@ -614,7 +1012,8 @@ return redirect()
             'valeCombustible',
             'vehiculos',
             'tiposCombustible',
-            'estacionesServicio'
+            'estacionesServicio',
+            'lugaresEntrega'
         )
     );
 }    /*
@@ -708,7 +1107,25 @@ return redirect()
     'string',
     'max:1000',
 ],
+    'detalle_asignacion' => [
+        'nullable',
+        'string',
+        'max:1000',
+    ],
 ]);
+if (
+    $valeCombustible->estado === 'ENTREGADO'
+    && trim((string) ($datos['detalle_asignacion'] ?? '')) === ''
+) {
+    throw ValidationException::withMessages([
+        'detalle_asignacion' => 'El detalle de asignación es obligatorio para registrar el uso del vale.',
+    ]);
+}
+$this->validarKilometrajeAnterior(
+    (int) $datos['vehiculo_id'],
+    $datos['kilometraje'] ?? null,
+    $valeCombustible->id
+);
 
 
         /*
@@ -833,10 +1250,18 @@ return redirect()
     'total' =>
         $datos['total'],
 
-        'observacion' => $datos['observacion'] ?? null,
+    'detalle_asignacion' =>
+        trim((string) ($datos['detalle_asignacion'] ?? '')) !== ''
+            ? $datos['detalle_asignacion']
+            : $vale->detalle_asignacion,
 
-    'estado' =>
-        'UTILIZADO',
+'observacion' => $datos['observacion'] ?? null,
+
+'estado' => 'UTILIZADO',
+
+'uso_registrado_por' => $vale->uso_registrado_por ?? auth()->id(),
+
+'uso_registrado_en' => $vale->uso_registrado_en ?? now(),
 ]);
 
         }, 3);
@@ -895,6 +1320,18 @@ $reglas = [
         'string',
         'max:50',
     ],
+
+    'estacion_servicio_id' => [
+        'nullable',
+        'integer',
+        'exists:estaciones_servicio,id',
+    ],
+
+    'lugar_entrega_id' => [
+        'nullable',
+        'integer',
+        'exists:lugares_entrega,id',
+    ],
 ];
 
 
@@ -906,17 +1343,9 @@ $reglas = [
 
 if ($estaCompletado) {
 
-    $reglas['tipo_combustible_id'] = [
-        'required',
-        'integer',
-        'exists:tipos_combustible,id',
-    ];
-
-    $reglas['estacion_servicio_id'] = [
-        'required',
-        'integer',
-        'exists:estaciones_servicio,id',
-    ];
+    $reglas['tipo_combustible_id'] = $valeCombustible->tipo_combustible_id === null
+        ? ['required', 'integer', 'exists:tipos_combustible,id']
+        : ['required', 'integer', 'in:' . $valeCombustible->tipo_combustible_id];
 
     $reglas['numero_factura'] = [
         'required',
@@ -948,6 +1377,40 @@ if ($estaCompletado) {
 
 $datos = $request->validate($reglas);
 
+$tipoVale = null;
+if ($estaCompletado) {
+    $tipoVale = TipoCombustible::findOrFail($datos['tipo_combustible_id']);
+    if (!$tipoVale->estado && (int) $tipoVale->id !== (int) $valeCombustible->tipo_combustible_id) {
+        throw ValidationException::withMessages([
+            'tipo_combustible_id' => 'Seleccione un combustible activo.',
+        ]);
+    }
+
+    if ($valeCombustible->tipo_combustible_id === null) {
+        $codigoCombustible = NumeracionVale::codigoSerie(null, 'GAMS', $tipoVale->nombre);
+        $serie = $valeCombustible->serieCorrelativa()->first();
+        if ($codigoCombustible === null || !$serie || $serie->codigo_serie !== $codigoCombustible) {
+            throw ValidationException::withMessages([
+                'tipo_combustible_id' => 'No se puede asignar ese combustible porque no coincide con la serie correlativa del vale.',
+            ]);
+        }
+    }
+} elseif ($valeCombustible->tipo_combustible_id !== null) {
+    $tipoVale = TipoCombustible::findOrFail($valeCombustible->tipo_combustible_id);
+}
+
+if ($tipoVale !== null) {
+    $datos = array_merge(
+        $datos,
+        $this->validarUbicacionGams($tipoVale, $datos, $valeCombustible)
+    );
+}
+
+$this->validarKilometrajeAnterior(
+    (int) $datos['vehiculo_id'],
+    $datos['kilometraje'] ?? null,
+    $valeCombustible->id
+);
 
 /*
 |--------------------------------------------------------------------------
@@ -1056,6 +1519,12 @@ DB::transaction(function () use (
 
         'apertura_programatica_id' =>
             $datos['apertura_programatica_id'],
+
+        'estacion_servicio_id' =>
+            $datos['estacion_servicio_id'] ?? $valeCombustible->estacion_servicio_id,
+
+        'lugar_entrega_id' =>
+            $datos['lugar_entrega_id'] ?? $valeCombustible->lugar_entrega_id,
     ];
 
 
@@ -1065,9 +1534,6 @@ DB::transaction(function () use (
 
             'tipo_combustible_id' =>
                 $datos['tipo_combustible_id'],
-
-            'estacion_servicio_id' =>
-                $datos['estacion_servicio_id'],
 
             'numero_factura' =>
                 $datos['numero_factura'],
@@ -1126,30 +1592,38 @@ return redirect()
         'periodo',
         'loteVale',
         'estacionServicio',
+        'lugarEntrega',
         'tipoCombustible',
+        'serieCorrelativa',
         'vehiculo.unidad',
         'vehiculo.aperturaProgramatica.fuenteFinanciamiento',
         'vehiculo.aperturaProgramatica.organismoFinanciador',
     ]);
 
-    /*
-    |--------------------------------------------------------------------------
-    | TIPOS DE COMBUSTIBLE ACTIVOS
-    |--------------------------------------------------------------------------
-    */
+    $tiposCombustible = TipoCombustible::where(function ($query) use ($valeCombustible) {
+        $query->where('estado', true);
 
-    $tiposCombustible = TipoCombustible::where('estado', true)
+        if ($valeCombustible->tipo_combustible_id !== null) {
+            $query->orWhere('id', $valeCombustible->tipo_combustible_id);
+        }
+    })
         ->orderBy('nombre')
         ->get();
 
+    $estacionesServicio = EstacionServicio::where(function ($query) use ($valeCombustible) {
+        $query->where('estado', true);
 
-    /*
-    |--------------------------------------------------------------------------
-    | ESTACIONES DE SERVICIO ACTIVAS
-    |--------------------------------------------------------------------------
-    */
+        if ($valeCombustible->estacion_servicio_id !== null) {
+            $query->orWhere('id', $valeCombustible->estacion_servicio_id);
+        }
+    })
+        ->orderBy('nombre')
+        ->get();
 
-    $estacionesServicio = EstacionServicio::where('estado', true)
+    $lugaresEntrega = LugarEntrega::where('estado', true)
+        ->when($valeCombustible->lugar_entrega_id, function ($query) use ($valeCombustible) {
+            $query->orWhere('id', $valeCombustible->lugar_entrega_id);
+        })
         ->orderBy('nombre')
         ->get();
 
@@ -1159,7 +1633,8 @@ return redirect()
         compact(
             'valeCombustible',
             'tiposCombustible',
-            'estacionesServicio'
+            'estacionesServicio',
+            'lugaresEntrega'
         )
     );
 
@@ -1178,19 +1653,15 @@ return redirect()
 ) {
     $this->normalizarDecimales($request);
 
+    $tipoCombustibleRules = $valeCombustible->tipo_combustible_id === null
+        ? ['required', 'integer', 'exists:tipos_combustible,id']
+        : ['sometimes', 'nullable', 'integer', 'in:' . $valeCombustible->tipo_combustible_id];
+
     $datos = $request->validate([
 
-        'tipo_combustible_id' => [
-            'required',
-            'integer',
-            'exists:tipos_combustible,id',
-        ],
-
-        'estacion_servicio_id' => [
-            'required',
-            'integer',
-            'exists:estaciones_servicio,id',
-        ],
+        'tipo_combustible_id' => $tipoCombustibleRules,
+        'estacion_servicio_id' => ['nullable', 'integer', 'exists:estaciones_servicio,id'],
+        'lugar_entrega_id' => ['nullable', 'integer', 'exists:lugares_entrega,id'],
 
         'numero_factura' => [
             'required',
@@ -1231,13 +1702,44 @@ return redirect()
             'Solo se pueden completar vales normales en estado EMITIDO.'
         );
 
+        $tipoCombustibleId = $vale->tipo_combustible_id
+            ?? $datos['tipo_combustible_id']
+            ?? null;
+        if ($tipoCombustibleId === null) {
+            throw ValidationException::withMessages([
+                'tipo_combustible_id' => 'Seleccione el tipo de combustible.',
+            ]);
+        }
+
+        $tipo = TipoCombustible::findOrFail($tipoCombustibleId);
+        if (!$tipo->estado && (int) $tipoCombustibleId !== (int) $vale->tipo_combustible_id) {
+            throw ValidationException::withMessages([
+                'tipo_combustible_id' => 'Seleccione un combustible activo.',
+            ]);
+        }
+
+        if ($vale->serie_correlativa_id) {
+            $codigoCombustible = NumeracionVale::codigoSerie(null, 'GAMS', $tipo->nombre);
+            $serie = $vale->serieCorrelativa()->first();
+            if ($codigoCombustible === null || !$serie || $serie->codigo_serie !== $codigoCombustible) {
+                throw ValidationException::withMessages([
+                    'tipo_combustible_id' => 'El combustible no corresponde a la serie correlativa de este vale.',
+                ]);
+            }
+        }
+
+        $ubicacion = $this->validarUbicacionGams($tipo, $datos, $vale);
+
         $vale->update([
 
             'tipo_combustible_id' =>
-                $datos['tipo_combustible_id'],
+                $tipoCombustibleId,
 
             'estacion_servicio_id' =>
-                $datos['estacion_servicio_id'],
+                $ubicacion['estacion_servicio_id'],
+
+            'lugar_entrega_id' =>
+                $ubicacion['lugar_entrega_id'],
 
             'numero_factura' =>
                 $datos['numero_factura'],
@@ -1334,81 +1836,5 @@ return redirect()
 
    public function destroy(ValeCombustible $valeCombustible)
 {
-    /*
-    |--------------------------------------------------------------------------
-    | SOLO VALES GAMS
-    |--------------------------------------------------------------------------
-    */
-
-    abort_if(
-        $valeCombustible->entrega_policia_id !== null,
-        409,
-        'Los vales de Policía no pueden eliminarse desde esta opción.'
-    );
-
-    /*
-    |--------------------------------------------------------------------------
-    | SOLO VALES PENDIENTES
-    |--------------------------------------------------------------------------
-    */
-
-    abort_unless(
-        $valeCombustible->estado === 'EMITIDO',
-        409,
-        'Solo se pueden eliminar vales pendientes que todavía no fueron cargados.'
-    );
-
-    /*
-    |--------------------------------------------------------------------------
-    | SOLO ADMINISTRADOR O AUXILIAR
-    |--------------------------------------------------------------------------
-    */
-
-    $rol = mb_strtoupper(
-        auth()->user()->rol->nombre ?? ''
-    );
-
-    abort_unless(
-        str_contains($rol, 'ADMIN') ||
-        str_contains($rol, 'AUX'),
-        403,
-        'No tiene permisos para eliminar vales.'
-    );
-
-    /*
-    |--------------------------------------------------------------------------
-    | ELIMINAR
-    |--------------------------------------------------------------------------
-    */
-
-    DB::transaction(function () use ($valeCombustible) {
-
-        $vale = ValeCombustible::lockForUpdate()
-            ->findOrFail($valeCombustible->id);
-
-        abort_unless(
-            $vale->estado === 'EMITIDO',
-            409,
-            'El vale ya no está pendiente y no puede eliminarse.'
-        );
-
-        abort_if(
-            $vale->entrega_policia_id !== null,
-            409,
-            'Los vales de Policía no pueden eliminarse desde esta opción.'
-        );
-
-        $vale->delete();
-    });
-
-    return redirect()
-        ->route('vales-combustible.index', [
-            'tipo' => 'GAMS'
-        ])
-        ->with(
-            'success',
-            'Vale eliminado correctamente. El número del vale no volverá a utilizarse.'
-        );
-
-    }
-}
+    abort(403, 'Los vales emitidos no pueden eliminarse. Utilice la opción Anular para conservar el historial y la numeración.');
+}}

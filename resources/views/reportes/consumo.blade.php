@@ -1,4 +1,5 @@
-@extends('layouts.app')
+@extends(request()->boolean('fragment') ? 'reportes.layouts.fragmento' : 'layouts.app')
+@include('reportes.partials.auto-print')
 
 @section('title', 'Reporte General de Consumo')
 
@@ -60,6 +61,7 @@
                 method="GET"
                 action="{{ route('reportes.consumo') }}"
             >
+                <input type="hidden" name="ambito" value="{{ request('ambito', 'todos') }}">
 
                 <div class="row g-3 align-items-end">
 
@@ -70,12 +72,14 @@
                             Fecha inicial
                         </label>
 
-                        <input
-                            type="date"
-                            name="fecha_inicio"
-                            class="form-control"
-                            value="{{ request('fecha_inicio') }}"
-                        >
+                     <input
+    type="date"
+    id="fecha_inicio"
+    name="fecha_inicio"
+    class="form-control"
+    value="{{ request('fecha_inicio') }}"
+    onclick="this.showPicker()"
+>
 
                     </div>
 
@@ -88,12 +92,13 @@
                         </label>
 
                         <input
-                            type="date"
-                            name="fecha_fin"
-                            class="form-control"
-                            value="{{ request('fecha_fin') }}"
-                        >
-
+    type="date"
+    id="fecha_fin"
+    name="fecha_fin"
+    class="form-control"
+    value="{{ request('fecha_fin') }}"
+    onclick="this.showPicker()"
+>
                     </div>
 
 
@@ -837,10 +842,7 @@ function generarPdf()
         + params.toString();
 
 
-    window.open(
-        url,
-        '_blank'
-    );
+ window.location.href = url;
 }
 
 </script>

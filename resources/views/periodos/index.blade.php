@@ -109,13 +109,8 @@
     <div>
 
         <h2 class="mb-1">
-            Periodos
-        </h2>
-
-        <p class="text-muted mb-0">
             Gestión de periodos
-        </p>
-
+        </h2>
     </div>
 
 
@@ -245,7 +240,8 @@
                                 <a
                                     href="{{ route('periodos.show', $periodo) }}"
                                     class="btn btn-sm btn-info text-white"
-                                    title="Ver">
+                                    title="Ver"
+                                    aria-label="Ver período">
 
                                     <i class="bi bi-eye"></i>
 
@@ -255,7 +251,8 @@
                                 <a
                                     href="{{ route('periodos.edit', $periodo) }}"
                                     class="btn btn-sm btn-warning"
-                                    title="Editar">
+                                    title="Editar"
+                                    aria-label="Editar período">
 
                                     <i class="bi bi-pencil"></i>
 
@@ -275,6 +272,7 @@
                                         type="submit"
                                         class="btn btn-sm btn-danger"
                                         title="Eliminar"
+                                        aria-label="Eliminar período"
                                         onclick="return confirm('¿Eliminar este periodo?')">
 
                                         <i class="bi bi-trash"></i>

@@ -203,7 +203,8 @@
         {{-- VER --}}
         <a href="{{ route('vehiculos.show', $vehiculo) }}"
            class="btn btn-sm btn-info text-white"
-           title="Ver vehículo">
+           title="Ver vehículo"
+           aria-label="Ver vehículo">
 
             <i class="bi bi-eye"></i>
 
@@ -215,7 +216,8 @@
             {{-- EDITAR --}}
             <a href="{{ route('vehiculos.edit', $vehiculo) }}"
                class="btn btn-sm btn-warning text-dark"
-               title="Editar vehículo">
+               title="Editar vehículo"
+               aria-label="Editar vehículo">
 
                 <i class="bi bi-pencil"></i>
 
@@ -233,7 +235,8 @@
 
                 <button type="submit"
                         class="btn btn-sm btn-danger"
-                        title="Eliminar vehículo">
+                        title="Eliminar vehículo"
+                        aria-label="Eliminar vehículo">
 
                     <i class="bi bi-trash"></i>
 
@@ -250,9 +253,10 @@
                 ['vehiculo_id' => $vehiculo->id]
             ) }}"
            class="btn btn-sm btn-success"
-           title="Reporte del vehículo">
+           title="Reporte del vehículo"
+           aria-label="Reporte del vehículo">
 
-            <i class="bi bi-bar-chart"></i>
+            <i class="bi bi-bar-chart" aria-hidden="true"></i>
 
         </a>
 
@@ -527,4 +531,3 @@ document.addEventListener('DOMContentLoaded', function () {
 </script>
 
 @endpush
-

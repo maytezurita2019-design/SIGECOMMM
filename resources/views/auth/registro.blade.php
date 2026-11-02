@@ -9,7 +9,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
           rel="stylesheet">
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css"
+    <link href="{{ asset('vendor/bootstrap-icons/font/bootstrap-icons.min.css') }}"
           rel="stylesheet">
 
     <style>
@@ -61,16 +61,6 @@
             margin-left: 5px;
         }
 
-        .titulo {
-            text-align: center;
-            margin-bottom: 25px;
-        }
-
-        .titulo h3 {
-            font-weight: 700;
-            margin-bottom: 5px;
-        }
-
         .formulario {
             background: #f8f9fa;
             border-radius: 15px;
@@ -99,14 +89,6 @@
         <i class="bi bi-fuel-pump-fill combustible"></i>
     </div>
 
-    <!-- <div class="titulo">
-        <h3>Crear cuenta nueva</h3>
-
-        <p class="text-muted mb-0">
-            Sistema de Control de Combustible
-        </p> -->
-    </div>
-
     @if ($errors->any())
         <div class="alert alert-danger">
 
@@ -122,6 +104,44 @@
         <form action="{{ route('registro.procesar') }}" method="POST">
 
             @csrf
+
+            <div class="mb-3">
+                <label for="nombre" class="form-label">
+                    Nombre
+                </label>
+
+                <input type="text"
+                       name="nombre"
+                       id="nombre"
+                       class="form-control"
+                       value="{{ old('nombre') }}"
+                       required>
+            </div>
+
+            <div class="mb-3">
+                <label for="apellido" class="form-label">
+                    Apellido
+                </label>
+
+                <input type="text"
+                       name="apellido"
+                       id="apellido"
+                       class="form-control"
+                       value="{{ old('apellido') }}"
+                       required>
+            </div>
+
+            <div class="mb-3">
+                <label for="telefono" class="form-label">
+                    Teléfono
+                </label>
+
+                <input type="text"
+                       name="telefono"
+                       id="telefono"
+                       class="form-control"
+                       value="{{ old('telefono') }}">
+            </div>
 
             <div class="mb-3">
                 <label for="correo" class="form-label">
@@ -151,6 +171,19 @@
                 <small class="text-muted">
                     Mínimo 8 caracteres.
                 </small>
+            </div>
+
+            <div class="mb-3">
+                <label for="contrasena_confirmation" class="form-label">
+                    Confirmar contraseña
+                </label>
+
+                <input type="password"
+                       name="contrasena_confirmation"
+                       id="contrasena_confirmation"
+                       class="form-control"
+                       minlength="8"
+                       required>
             </div>
 
             <button type="submit"

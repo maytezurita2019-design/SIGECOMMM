@@ -1,0 +1,164 @@
+@media screen {
+    :root {
+        --sig-font-family: Inter, "Segoe UI", Arial, sans-serif;
+        --sig-font-text: 15px;
+        --sig-font-small: 13px;
+    }
+
+    body,
+    button,
+    input,
+    select,
+    textarea {
+        font-family: var(--sig-font-family);
+    }
+
+    body {
+        font-size: var(--sig-font-text);
+        line-height: 1.5;
+    }
+
+    h1,
+    .h1 {
+        font-size: 28px !important;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    h2,
+    .h2 {
+        font-size: 22px !important;
+        font-weight: 650;
+        line-height: 1.3;
+    }
+
+    h3,
+    .h3 {
+        font-size: 20px !important;
+        font-weight: 650;
+        line-height: 1.35;
+    }
+
+    h4,
+    .h4 {
+        font-size: 18px !important;
+        font-weight: 600;
+        line-height: 1.35;
+    }
+
+    h5,
+    .h5,
+    .card-title {
+        font-size: 20px !important;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    h6,
+    .h6 {
+        font-size: 16px !important;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    .page-title,
+    .dash-welcome {
+        font-size: 28px !important;
+        font-weight: 700;
+        line-height: 1.25;
+    }
+
+    .table {
+        font-size: 14.5px;
+        line-height: 1.45;
+    }
+
+    .table thead th {
+        font-size: 14px !important;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    .table tbody td {
+        font-weight: 400;
+    }
+
+    .form-label {
+        font-size: 15px;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    .form-control,
+    .form-select,
+    .input-group-text {
+        font-size: 16px;
+        line-height: 1.45;
+    }
+
+    .btn,
+    .btn:not(.btn-close) {
+        font-size: 14px;
+        font-weight: 600;
+        line-height: 1.4;
+    }
+
+    .btn > .bi,
+    .btn:not(.btn-close) > .bi {
+        flex: 0 0 auto;
+        vertical-align: middle;
+    }
+
+    .sidebar-menu .nav-link,
+    .sidebar-menu .nav-treeview .nav-link {
+        font-size: 14px !important;
+        line-height: 1.45;
+    }
+
+    .sidebar-menu .nav-header {
+        font-size: 13px;
+        line-height: 1.4;
+    }
+
+    .form-text,
+    .invalid-feedback,
+    .valid-feedback,
+    small,
+    .small {
+        font-size: var(--sig-font-small) !important;
+        line-height: 1.45;
+    }
+
+    .dash-system,
+    .dash-stat-label,
+    .dash-stat-description,
+    .report-eyebrow,
+    .report-stat-note,
+    .report-chart-label,
+    .report-chart-value,
+    .sig-auto .label {
+        font-size: var(--sig-font-small) !important;
+        line-height: 1.45;
+    }
+
+    .dash-subtitle {
+        font-size: var(--sig-font-text);
+    }
+
+    .table-responsive {
+        -webkit-overflow-scrolling: touch;
+    }
+
+    @media (max-width: 767.98px) {
+        .table-responsive > .table {
+            min-width: 40rem;
+        }
+
+        h1,
+        .h1,
+        .page-title,
+        .dash-welcome {
+            font-size: 26px !important;
+        }
+    }
+}

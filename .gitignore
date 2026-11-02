@@ -22,3 +22,9 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+*.backup
+chromedriver.exe
+
+# Exportaciones de bases de datos
+*.sql

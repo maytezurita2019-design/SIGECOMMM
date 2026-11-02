@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use App\Models\AperturaProgramatica;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\ParteDiario;
+use App\Models\TipoCombustible;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
@@ -17,14 +18,277 @@ use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 class ReporteController extends Controller
 {
-    /*
-    |--------------------------------------------------------------------------
-    | REPORTE GENERAL DE CONSUMO
-    |--------------------------------------------------------------------------
-    */
+    public function index(Request $request)
+    {
+        $reportHtml = null;
+        $dashboard = null;
+
+        if ($request->filled('tipo_reporte')) {
+            $filtros = $request->validate([
+                'tipo_reporte' => 'required|in:general,vehiculo,individual,apertura,policia',
+                'ambito' => 'required|in:todos,gams,policia',
+                'formato' => 'required|in:html,pdf,excel,imprimir',
+                'fecha_inicio' => 'nullable|date',
+                'fecha_fin' => 'nullable|date|after_or_equal:fecha_inicio',
+                'mes' => 'required_if:periodicidad,mensual|nullable|integer|between:1,12',
+                'anio' => 'required_if:periodicidad,mensual,anual|nullable|integer|between:2000,2100',
+                'periodicidad' => 'nullable|in:mensual,anual,personalizado',
+                'vehiculo_id' => 'required_if:tipo_reporte,individual|nullable|integer|exists:vehiculos,id',
+                'unidad_id' => 'nullable|integer|exists:unidades,id',
+                'apertura_programatica_id' => 'nullable|integer|exists:aperturas_programaticas,id',
+                'periodo_id' => 'nullable|integer|exists:periodos,id',
+                'tipo_combustible_id' => 'nullable|integer|exists:tipos_combustible,id',
+                'observaciones' => 'nullable|string|max:2000',
+            ]);
+
+            $periodicidad = $filtros['periodicidad'] ?? (
+                $filtros['tipo_reporte'] === 'policia' ? 'mensual' : 'personalizado'
+            );
+            $filtros['periodicidad'] = $periodicidad;
+            $request->merge($filtros);
+
+            if ($periodicidad === 'mensual' && !empty($filtros['mes']) && !empty($filtros['anio'])) {
+                $inicio = \Carbon\Carbon::createFromDate($filtros['anio'], $filtros['mes'], 1);
+                $request->merge([
+                    'fecha_inicio' => $inicio->toDateString(),
+                    'fecha_fin' => $inicio->copy()->endOfMonth()->toDateString(),
+                ]);
+                $filtros['fecha_inicio'] = $inicio->toDateString();
+                $filtros['fecha_fin'] = $inicio->copy()->endOfMonth()->toDateString();
+            } elseif ($periodicidad === 'anual' && !empty($filtros['anio'])) {
+                $request->merge([
+                    'fecha_inicio' => $filtros['anio'] . '-01-01',
+                    'fecha_fin' => $filtros['anio'] . '-12-31',
+                ]);
+                $filtros['fecha_inicio'] = $filtros['anio'] . '-01-01';
+                $filtros['fecha_fin'] = $filtros['anio'] . '-12-31';
+            }
+
+            $rutas = [
+                'general' => [
+                    'html' => 'reportes.consumo',
+                    'pdf' => 'reportes.consumo.pdf',
+                    'excel' => 'reportes.consumo.excel',
+                    'imprimir' => 'reportes.consumo',
+                ],
+                'vehiculo' => [
+                    'html' => 'reportes.vehiculos',
+                    'pdf' => 'reportes.vehiculos.pdf',
+                    'excel' => 'reportes.vehiculos.excel',
+                    'imprimir' => 'reportes.vehiculos',
+                ],
+                'individual' => [
+                    'html' => 'reportes.vehiculo-individual',
+                    'pdf' => 'reportes.vehiculo-individual.pdf',
+                    'excel' => 'reportes.vehiculo-individual.excel',
+                    'imprimir' => 'reportes.vehiculo-individual',
+                ],
+                'apertura' => [
+                    'html' => 'reportes.aperturas',
+                    'pdf' => 'reportes.aperturas.pdf',
+                    'excel' => 'reportes.aperturas.excel',
+                    'imprimir' => 'reportes.aperturas',
+                ],
+                'policia' => [
+                    'html' => 'reportes.policia-vehiculos',
+                    'pdf' => 'reportes.policia-vehiculos.pdf',
+                    'excel' => 'reportes.policia-vehiculos.excel',
+                    'imprimir' => 'reportes.policia-vehiculos',
+                ],
+            ];
+
+            $formato = $filtros['formato'];
+            unset($filtros['tipo_reporte'], $filtros['formato']);
+
+            if ($formato === 'html') {
+                $request->merge(['fragment' => true]);
+                $dashboard = $this->datosDashboard($request);
+                $vistaReporte = match ($request->input('tipo_reporte')) {
+                    'general' => $this->consumo($request),
+                    'vehiculo' => $this->porVehiculo($request),
+                    'individual' => $this->vehiculoIndividual($request),
+                    'apertura' => $this->porApertura($request),
+                    'policia' => app(ReportePoliciaVehiculoController::class)->index($request),
+                };
+
+                if (!$vistaReporte instanceof \Illuminate\Contracts\View\View) {
+                    throw new \LogicException('El controlador del reporte no devolvió una vista HTML.');
+                }
+
+                $reportHtml = $vistaReporte->render();
+
+                if ($request->header('X-Requested-With') === 'XMLHttpRequest') {
+                    return response()->json([
+                        'dashboardHtml' => view('reportes.partials.dashboard', compact('dashboard'))->render(),
+                        'reportHtml' => view('reportes.partials.resultado', compact('reportHtml'))->render(),
+                    ]);
+                }
+            }
+
+            if ($formato === 'imprimir') {
+                $filtros['imprimir'] = 1;
+            }
+
+            if ($formato !== 'html') {
+                return redirect()->route(
+                    $rutas[$request->input('tipo_reporte')][$formato],
+                    $filtros
+                );
+            }
+        }
+
+        return view('reportes.index', [
+            'vehiculos' => Vehiculo::orderBy('codigo')->get(),
+            'unidades' => Unidad::orderBy('nombre')->get(),
+            'aperturas' => AperturaProgramatica::where('estado', true)->orderBy('codigo')->get(),
+            'periodos' => Periodo::orderByDesc('anio')->orderByDesc('mes')->get(),
+            'tiposCombustible' => TipoCombustible::orderBy('nombre')->get(),
+            'reportHtml' => $reportHtml,
+            'dashboard' => $dashboard,
+        ]);
+    }
+
+    private function consultaConsumo(Request $request)
+    {
+        $filtros = $request->validate([
+            'ambito' => 'nullable|in:todos,gams,policia',
+            'tipo_combustible_id' => 'nullable|integer|exists:tipos_combustible,id',
+        ]);
+
+        $consulta = ValeCombustible::conConsumo($filtros['ambito'] ?? 'todos');
+
+        if (!empty($filtros['tipo_combustible_id'])) {
+            $consulta->where('tipo_combustible_id', $filtros['tipo_combustible_id']);
+        }
+
+        return $consulta;
+    }
+
+    private function etiquetasReporteVehiculos(Request $request): array
+    {
+        $periodicidad = $request->input('periodicidad', 'personalizado');
+        $mes = (int) $request->input('mes', now()->month);
+        $anio = (int) $request->input('anio', now()->year);
+        $fechaInicio = $request->input('fecha_inicio');
+        $fechaFin = $request->input('fecha_fin');
+
+        $periodo = match ($periodicidad) {
+            'mensual' => \Carbon\Carbon::createFromDate($anio, $mes, 1)
+                ->locale('es')
+                ->translatedFormat('F Y'),
+            'anual' => (string) $anio,
+            default => $fechaInicio || $fechaFin
+                ? (($fechaInicio ? \Carbon\Carbon::parse($fechaInicio)->format('d/m/Y') : 'Inicio abierto')
+                    . ' – '
+                    . ($fechaFin ? \Carbon\Carbon::parse($fechaFin)->format('d/m/Y') : 'Sin fecha final'))
+                : 'Todos los períodos',
+        };
+
+        $ambito = match ($request->input('ambito', 'todos')) {
+            'gams' => 'GAMS',
+            'policia' => 'Policía',
+            default => 'Todos (GAMS y Policía)',
+        };
+        $combustible = $request->filled('tipo_combustible_id')
+            ? TipoCombustible::find($request->input('tipo_combustible_id'))?->nombre
+            : 'Todos';
+
+        return compact('periodo', 'ambito', 'combustible');
+    }
+
+    private function datosDashboard(Request $request): array
+    {
+        $consultaConsumos = $this->consultaConsumo($request)
+            ->with(['vehiculo', 'tipoCombustible']);
+        $this->aplicarFiltrosDashboard($consultaConsumos, $request);
+        $consumos = $consultaConsumos->get();
+
+        $porVehiculo = $consumos
+            ->groupBy(fn ($vale) => $vale->vehiculo_id ?? 0)
+            ->map(function ($vales) {
+                $vehiculo = $vales->first()->vehiculo;
+
+                return [
+                    'label' => trim(($vehiculo?->codigo ?? 'SIN CÓDIGO') . ' · ' . ($vehiculo?->placa ?? 'SIN PLACA')),
+                    'litros' => (float) $vales->sum(fn ($vale) => (float) ($vale->cantidad_litros ?? 0)),
+                ];
+            })
+            ->sortByDesc('litros')
+            ->values();
+
+        $porMes = $consumos
+            ->groupBy(fn ($vale) => $vale->fecha?->format('m') ?? '00')
+            ->map(fn ($vales) => (float) $vales->sum(fn ($vale) => (float) ($vale->cantidad_litros ?? 0)));
+
+        $porCombustible = $consumos
+            ->groupBy(fn ($vale) => $vale->tipoCombustible?->nombre ?? 'Sin tipo')
+            ->map(fn ($vales, $nombre) => [
+                'label' => $nombre,
+                'litros' => (float) $vales->sum(fn ($vale) => (float) ($vale->cantidad_litros ?? 0)),
+            ])
+            ->sortByDesc('litros')
+            ->values();
+
+        $entregados = 0;
+        if (($request->input('ambito', 'todos')) !== 'gams') {
+            $entregados = ValeCombustible::query()
+                ->whereNotNull('entrega_policia_id')
+                ->where('estado', 'ENTREGADO')
+                ->count();
+        }
+
+        $pendientes = 0;
+        if (($request->input('ambito', 'todos')) !== 'policia') {
+            $pendientes = ValeCombustible::query()
+                ->whereNull('entrega_policia_id')
+                ->where('estado', 'EMITIDO')
+                ->count();
+        }
+
+        $periodicidad = $request->input('periodicidad', 'personalizado');
+
+        return [
+            'totalVales' => $consumos->count(),
+            'totalLitros' => (float) $consumos->sum(fn ($vale) => (float) ($vale->cantidad_litros ?? 0)),
+            'entregados' => $entregados,
+            'pendientes' => $pendientes,
+            'mostrarEntregados' => ($request->input('ambito', 'todos')) !== 'gams',
+            'mostrarPendientes' => ($request->input('ambito', 'todos')) !== 'policia',
+            'vehiculos' => $porVehiculo,
+            'meses' => collect(range(1, 12))->map(fn ($mes) => [
+                'label' => \Carbon\Carbon::create(now()->year, $mes, 1)->locale('es')->translatedFormat('M'),
+                'litros' => (float) $porMes->get(sprintf('%02d', $mes), 0),
+            ]),
+            'combustibles' => $porCombustible,
+            'mostrarMeses' => $periodicidad === 'anual',
+        ];
+    }
+
+    private function aplicarFiltrosDashboard($consulta, Request $request): void
+    {
+        $this->aplicarFiltrosFecha($consulta, $request);
+
+        if ($request->filled('vehiculo_id')) {
+            $consulta->where('vehiculo_id', $request->input('vehiculo_id'));
+        }
+        if ($request->filled('unidad_id')) {
+            $consulta->whereHas('vehiculo', fn ($query) => $query->where('unidad_id', $request->input('unidad_id')));
+        }
+        if ($request->filled('apertura_programatica_id')) {
+            $consulta->where('apertura_programatica_id', $request->input('apertura_programatica_id'));
+        }
+        if ($request->filled('periodo_id')) {
+            $consulta->where('periodo_id', $request->input('periodo_id'));
+        }
+        if ($request->filled('tipo_combustible_id')) {
+            $consulta->where('tipo_combustible_id', $request->input('tipo_combustible_id'));
+        }
+    }
+
+
     public function consumo(Request $request)
 {
-    $consulta = ValeCombustible::conConsumo()->with([
+    $consulta = $this->consultaConsumo($request)->with([
         'vehiculo.unidad',
         'tipoCombustible',
         'estacionServicio',
@@ -32,39 +296,19 @@ class ReporteController extends Controller
         'usuario',
     ]);
 
-    // Fecha inicial
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate('fecha', '>=', $request->fecha_inicio);
-    }
-
-    // Fecha final
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate('fecha', '<=', $request->fecha_fin);
-    }
-
-    // Vehículo
+$this->aplicarFiltrosFecha($consulta, $request);
     if ($request->filled('vehiculo_id')) {
         $consulta->where('vehiculo_id', $request->vehiculo_id);
     }
-
-    // Unidad
     if ($request->filled('unidad_id')) {
         $consulta->whereHas('vehiculo', function ($query) use ($request) {
             $query->where('unidad_id', $request->unidad_id);
         });
     }
-
-    // Obtener vales
     $vales = $consulta
         ->orderByDesc('fecha')
         ->orderByDesc('numero_vale')
         ->get();
-
-    /*
-    |--------------------------------------------------------------------------
-    | TOTALES GENERALES
-    |--------------------------------------------------------------------------
-    */
 
     $totalVales = $vales->count();
 
@@ -77,13 +321,6 @@ class ReporteController extends Controller
     $totalLitros = (float) $vales->sum('cantidad_litros');
 
     $totalMonto = (float) $vales->sum('total');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | REPORTE CONSOLIDADO POR UNIDAD
-    |--------------------------------------------------------------------------
-    */
 
     $resumenUnidades = $vales
         ->groupBy(function ($vale) {
@@ -145,30 +382,15 @@ class ReporteController extends Controller
         ->sortBy('unidad')
         ->values();
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | TOTALES POR TIPO
-    |--------------------------------------------------------------------------
-    */
-
     $totalGasolina = (float) $resumenUnidades->sum('gasolina');
 
     $totalDiesel = (float) $resumenUnidades->sum('diesel');
 
     $totalOtros = (float) $resumenUnidades->sum('otros');
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | DATOS DE LOS FILTROS
-    |--------------------------------------------------------------------------
-    */
-
     $vehiculos = Vehiculo::orderBy('codigo')->get();
 
     $unidades = Unidad::orderBy('nombre')->get();
-
 
     return view('reportes.consumo', compact(
         'vales',
@@ -187,11 +409,6 @@ class ReporteController extends Controller
 
 public function consumoPdf(Request $request)
 {
-    /*
-    |--------------------------------------------------------------------------
-    | VALIDACIÓN
-    |--------------------------------------------------------------------------
-    */
 
     $request->validate([
         'fecha_inicio' => ['nullable', 'date'],
@@ -202,14 +419,7 @@ public function consumoPdf(Request $request)
         'texto_inferior' => ['nullable', 'string'],
     ]);
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | CONSULTA
-    |--------------------------------------------------------------------------
-    */
-
-    $consulta = ValeCombustible::conConsumo()->with([
+    $consulta = $this->consultaConsumo($request)->with([
         'vehiculo.unidad',
         'tipoCombustible',
         'estacionServicio',
@@ -217,30 +427,7 @@ public function consumoPdf(Request $request)
         'usuario',
     ]);
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | FILTROS
-    |--------------------------------------------------------------------------
-    */
-
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
-        );
-    }
-
-
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
-
+    $this->aplicarFiltrosFecha($consulta, $request);
 
     if ($request->filled('vehiculo_id')) {
         $consulta->where(
@@ -248,7 +435,6 @@ public function consumoPdf(Request $request)
             $request->vehiculo_id
         );
     }
-
 
     if ($request->filled('unidad_id')) {
 
@@ -265,27 +451,12 @@ public function consumoPdf(Request $request)
         );
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | VALES
-    |--------------------------------------------------------------------------
-    */
-
     $vales = $consulta
         ->orderByDesc('fecha')
         ->orderByDesc('numero_vale')
         ->get();
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | TOTALES GENERALES
-    |--------------------------------------------------------------------------
-    */
-
     $totalVales = $vales->count();
-
 
     $totalVehiculos = $vales
         ->pluck('vehiculo_id')
@@ -293,20 +464,11 @@ public function consumoPdf(Request $request)
         ->unique()
         ->count();
 
-
     $totalLitros = (float) $vales
         ->sum('cantidad_litros');
 
-
     $totalMonto = (float) $vales
         ->sum('total');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CONSOLIDADO POR UNIDAD
-    |--------------------------------------------------------------------------
-    */
 
     $resumenUnidades = $vales
         ->groupBy(function ($vale) {
@@ -319,12 +481,6 @@ public function consumoPdf(Request $request)
 
         })
         ->map(function ($grupo, $unidad) {
-
-            /*
-            |--------------------------------------------------------------------------
-            | GASOLINA
-            |--------------------------------------------------------------------------
-            */
 
             $gasolina = $grupo
                 ->filter(function ($vale) {
@@ -341,13 +497,6 @@ public function consumoPdf(Request $request)
                 })
                 ->sum('cantidad_litros');
 
-
-            /*
-            |--------------------------------------------------------------------------
-            | DIÉSEL
-            |--------------------------------------------------------------------------
-            */
-
             $diesel = $grupo
                 ->filter(function ($vale) {
 
@@ -362,13 +511,6 @@ public function consumoPdf(Request $request)
 
                 })
                 ->sum('cantidad_litros');
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | OTROS
-            |--------------------------------------------------------------------------
-            */
 
             $otros = $grupo
                 ->filter(function ($vale) {
@@ -390,13 +532,6 @@ public function consumoPdf(Request $request)
 
                 })
                 ->sum('cantidad_litros');
-
-
-            /*
-            |--------------------------------------------------------------------------
-            | FILA DEL REPORTE
-            |--------------------------------------------------------------------------
-            */
 
             return (object) [
 
@@ -428,30 +563,14 @@ public function consumoPdf(Request $request)
         ->sortBy('unidad')
         ->values();
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | TOTALES POR COMBUSTIBLE
-    |--------------------------------------------------------------------------
-    */
-
     $totalGasolina = (float) $resumenUnidades
         ->sum('gasolina');
-
 
     $totalDiesel = (float) $resumenUnidades
         ->sum('diesel');
 
-
     $totalOtros = (float) $resumenUnidades
         ->sum('otros');
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | TEXTOS PERSONALIZADOS
-    |--------------------------------------------------------------------------
-    */
 
     $textoSuperior = trim(
         (string) $request->input(
@@ -460,7 +579,6 @@ public function consumoPdf(Request $request)
         )
     );
 
-
     $textoInferior = trim(
         (string) $request->input(
             'texto_inferior',
@@ -468,25 +586,15 @@ public function consumoPdf(Request $request)
         )
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOGOS
-    |--------------------------------------------------------------------------
-    */
-
     $logoSacabaPath =
         public_path('images/logo-sacaba.jpg');
-
 
     $logoChaparePath =
         public_path('images/logo-chapare.png');
 
-
     $logoSacaba = null;
 
     $logoChapare = null;
-
 
     if (file_exists($logoSacabaPath)) {
 
@@ -499,26 +607,6 @@ public function consumoPdf(Request $request)
             );
 
     }
-
-
-    if (file_exists($logoChaparePath)) {
-
-        $logoChapare =
-            'data:image/png;base64,' .
-            base64_encode(
-                file_get_contents(
-                    $logoChaparePath
-                )
-            );
-
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | GENERAR PDF
-    |--------------------------------------------------------------------------
-    */
 
     $pdf = Pdf::loadView(
         'reportes.pdf.consumo',
@@ -539,73 +627,22 @@ public function consumoPdf(Request $request)
         )
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | HOJA CARTA HORIZONTAL
-    |--------------------------------------------------------------------------
-    */
-
     $pdf->setPaper(
         'letter',
         'landscape'
     );
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | MOSTRAR PDF
-    |--------------------------------------------------------------------------
-    */
-
-    return $pdf->stream(
+    return $pdf->download(
         'Reporte_general_consumo_' .
-        now()->format('Ymd_His') .
+        now()->format('Y-m-d')  .
         '.pdf'
     );
 }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | REPORTE POR VEHÍCULO
-    |--------------------------------------------------------------------------
-    */
-    public function porVehiculo(Request $request)
-{
-    /*
-    |--------------------------------------------------------------------------
-    | CONSULTA DE CONSUMO
-    |--------------------------------------------------------------------------
-    */
-
-    $consulta = ValeCombustible::conConsumo()->with([
-        'vehiculo.unidad',
-        'tipoCombustible',
-        'aperturaProgramatica.fuenteFinanciamiento',
-        'aperturaProgramatica.organismoFinanciador',
-        'estacionServicio',
-    ]);
-
-    /*
-    |--------------------------------------------------------------------------
-    | FILTRO POR VEHÍCULO
-    |--------------------------------------------------------------------------
-    */
-
-    if ($request->filled('vehiculo_id')) {
-        $consulta->where(
-            'vehiculo_id',
-            $request->vehiculo_id
-        );
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | FILTRO POR FECHA INICIAL
-    |--------------------------------------------------------------------------
-    */
-
+private function aplicarFiltrosFecha(
+    $consulta,
+    Request $request
+) {
     if ($request->filled('fecha_inicio')) {
         $consulta->whereDate(
             'fecha',
@@ -613,12 +650,6 @@ public function consumoPdf(Request $request)
             $request->fecha_inicio
         );
     }
-
-    /*
-    |--------------------------------------------------------------------------
-    | FILTRO POR FECHA FINAL
-    |--------------------------------------------------------------------------
-    */
 
     if ($request->filled('fecha_fin')) {
         $consulta->whereDate(
@@ -628,26 +659,34 @@ public function consumoPdf(Request $request)
         );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | OBTENER VALES
-    |--------------------------------------------------------------------------
-    */
+    return $consulta;
+}
+
+    public function porVehiculo(Request $request)
+{
+
+    $consulta = $this->consultaConsumo($request)->with([
+        'vehiculo.unidad',
+        'tipoCombustible',
+        'aperturaProgramatica.fuenteFinanciamiento',
+        'aperturaProgramatica.organismoFinanciador',
+        'estacionServicio',
+    ]);
+
+    if ($request->filled('vehiculo_id')) {
+        $consulta->where(
+            'vehiculo_id',
+            $request->vehiculo_id
+        );
+    }
+
+$this->aplicarFiltrosFecha($consulta, $request);
 
     $vales = $consulta
         ->orderBy('vehiculo_id')
         ->orderBy('fecha')
         ->orderBy('numero_vale')
         ->get();
-
-    /*
-    |--------------------------------------------------------------------------
-    | OBTENER PARTES DIARIOS
-    |--------------------------------------------------------------------------
-    | Se buscan únicamente los partes correspondientes a los vehículos y
-    | fechas que aparecen dentro del reporte.
-    |--------------------------------------------------------------------------
-    */
 
     $vehiculoIds = $vales
         ->pluck('vehiculo_id')
@@ -701,12 +740,6 @@ public function consumoPdf(Request $request)
             });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | PREPARAR REPORTE
-    |--------------------------------------------------------------------------
-    */
-
     $reporte = $vales
         ->map(function ($vale) use ($partesDiarios) {
 
@@ -725,12 +758,6 @@ public function consumoPdf(Request $request)
             $parte = $partesDiarios->get(
                 $claveParte
             );
-
-            /*
-            |--------------------------------------------------------------------------
-            | ESTADO DEL PARTE DIARIO
-            |--------------------------------------------------------------------------
-            */
 
             if (!$parte) {
 
@@ -752,6 +779,9 @@ public function consumoPdf(Request $request)
 
                 'numero_vale' =>
                     $vale->numero_vale,
+
+                'combustible' =>
+                    $vale->tipoCombustible?->nombre ?? '-',
 
                 'vehiculo_id' =>
                     $vale->vehiculo_id,
@@ -794,12 +824,6 @@ public function consumoPdf(Request $request)
         })
         ->values();
 
-    /*
-    |--------------------------------------------------------------------------
-    | TOTALES
-    |--------------------------------------------------------------------------
-    */
-
     $totalVales = $reporte->count();
 
     $totalVehiculos = $reporte
@@ -814,18 +838,14 @@ public function consumoPdf(Request $request)
     $totalMonto = (float) $reporte
         ->sum('total');
 
-    /*
-    |--------------------------------------------------------------------------
-    | VEHÍCULOS PARA EL FILTRO
-    |--------------------------------------------------------------------------
-    */
-
     $vehiculos = Vehiculo::where(
             'estado',
             true
         )
         ->orderBy('codigo')
         ->get();
+
+    $observaciones = trim((string) $request->input('observaciones', ''));
 
     return view(
         'reportes.vehiculos',
@@ -836,7 +856,8 @@ public function consumoPdf(Request $request)
             'totalVales',
             'totalVehiculos',
             'totalLitros',
-            'totalMonto'
+            'totalMonto',
+            'observaciones'
         )
     );
 }
@@ -862,7 +883,7 @@ public function vehiculoIndividual(Request $request)
             'aperturaProgramatica.organismoFinanciador',
         ])->findOrFail($request->vehiculo_id);
 
-        $consulta = ValeCombustible::conConsumo()
+        $consulta = $this->consultaConsumo($request)
             ->with([
                 'aperturaProgramatica',
                 'tipoCombustible',
@@ -870,21 +891,7 @@ public function vehiculoIndividual(Request $request)
             ])
             ->where('vehiculo_id', $vehiculo->id);
 
-        if ($request->filled('fecha_inicio')) {
-            $consulta->whereDate(
-                'fecha',
-                '>=',
-                $request->fecha_inicio
-            );
-        }
-
-        if ($request->filled('fecha_fin')) {
-            $consulta->whereDate(
-                'fecha',
-                '<=',
-                $request->fecha_fin
-            );
-        }
+$this->aplicarFiltrosFecha($consulta, $request);
 
         $vales = $consulta
             ->orderBy('fecha')
@@ -928,7 +935,7 @@ public function vehiculoIndividualPdf(Request $request)
         'aperturaProgramatica.organismoFinanciador',
     ])->findOrFail($request->vehiculo_id);
 
-    $consulta = ValeCombustible::conConsumo()
+    $consulta = $this->consultaConsumo($request)
         ->with([
             'aperturaProgramatica',
             'tipoCombustible',
@@ -936,21 +943,7 @@ public function vehiculoIndividualPdf(Request $request)
         ])
         ->where('vehiculo_id', $vehiculo->id);
 
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
-        );
-    }
-
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
+    $this->aplicarFiltrosFecha($consulta, $request);
 
     $vales = $consulta
         ->orderBy('fecha')
@@ -970,12 +963,6 @@ public function vehiculoIndividualPdf(Request $request)
     $textoInferior = trim(
         (string) $request->input('texto_inferior', '')
     );
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOGOS
-    |--------------------------------------------------------------------------
-    */
 
     $logoSacabaPath = public_path('images/logo-sacaba.jpg');
     $logoChaparePath = public_path('images/logo-chapare.png');
@@ -1012,11 +999,11 @@ public function vehiculoIndividualPdf(Request $request)
 
     $pdf->setPaper('letter', 'landscape');
 
-    return $pdf->stream(
+    return $pdf->download(
         'Reporte_individual_' .
         $vehiculo->codigo .
         '_' .
-        now()->format('Ymd_His') .
+        now()->format('Y-m-d')  .
         '.pdf'
     );
 }
@@ -1028,420 +1015,48 @@ public function vehiculoIndividualExcel(Request $request)
         'fecha_fin' => ['nullable', 'date', 'after_or_equal:fecha_inicio'],
     ]);
 
-    /*
-    |--------------------------------------------------------------------------
-    | VEHÍCULO
-    |--------------------------------------------------------------------------
-    */
+    $vehiculo = Vehiculo::with('unidad')->findOrFail($request->vehiculo_id);
 
-    $vehiculo = Vehiculo::with([
-        'unidad',
-        'aperturaProgramatica.fuenteFinanciamiento',
-        'aperturaProgramatica.organismoFinanciador',
-    ])->findOrFail($request->vehiculo_id);
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | VALES
-    |--------------------------------------------------------------------------
-    */
-
-    $consulta = ValeCombustible::conConsumo()
-        ->with([
-            'aperturaProgramatica',
-            'tipoCombustible',
-            'estacionServicio',
-        ])
+    $consulta = $this->consultaConsumo($request)
+        ->with('aperturaProgramatica')
         ->where('vehiculo_id', $vehiculo->id);
 
-
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
-        );
-    }
-
-
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
-
+    $this->aplicarFiltrosFecha($consulta, $request);
 
     $vales = $consulta
         ->orderBy('fecha')
         ->orderBy('numero_vale')
         ->get();
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | SI ZIPARCHIVE NO ESTÁ DISPONIBLE -> CSV
-    |--------------------------------------------------------------------------
-    */
-
-    if (!class_exists(\ZipArchive::class)) {
-
-        $nombre =
-            'SIGECOM_Reporte_individual_' .
-            $vehiculo->codigo .
-            '_' .
-            now()->format('Ymd_His') .
-            '.csv';
-
-
-        return response()->streamDownload(
-            function () use ($vehiculo, $vales) {
-
-                $out = fopen('php://output', 'w');
-
-                fwrite($out, "\xEF\xBB\xBF");
-
-
-                fputcsv($out, [
-                    'REPORTE INDIVIDUAL POR VEHÍCULO'
-                ], ';');
-
-
-                fputcsv($out, [
-                    'Código',
-                    $vehiculo->codigo
-                ], ';');
-
-
-                fputcsv($out, [
-                    'Placa',
-                    $vehiculo->placa
-                ], ';');
-
-
-                fputcsv($out, [
-                    'Tipo',
-                    $vehiculo->tipo
-                ], ';');
-
-
-                fputcsv($out, [
-                    'Industria',
-                    $vehiculo->industria
-                ], ';');
-
-
-                fputcsv($out, [
-                    'Color',
-                    $vehiculo->color
-                ], ';');
-
-
-                fputcsv($out, [
-                    'Marca',
-                    $vehiculo->marca
-                ], ';');
-
-
-                fputcsv($out, [
-                    'Unidad',
-                    $vehiculo->unidad?->nombre ?? '-'
-                ], ';');
-
-
-                fputcsv($out, [], ';');
-
-
-                fputcsv($out, [
-                    'FECHA',
-                    'VALE',
-                    'CANTIDAD (LT)',
-                    'PRECIO (LT)',
-                    'TOTAL (Bs)',
-                    'N.º FACTURA',
-                    'KILOMETRAJE',
-                    'DETALLE DE ASIGNACIÓN',
-                    'APERTURA PROGRAM.'
-                ], ';');
-
-
-                foreach ($vales as $vale) {
-
-                    $detalle =
-                        'ASIGNADO A ' .
-                        mb_strtoupper(
-                            $vehiculo->tipo ?: 'VEHÍCULO'
-                        );
-
-                    if ($vehiculo->unidad) {
-                        $detalle .=
-                            ' DE ' .
-                            mb_strtoupper(
-                                $vehiculo->unidad->nombre ?? ''
-                            );
-                    }
-
-
-                    fputcsv($out, [
-
-                        $vale->fecha
-                            ? $vale->fecha->format('d/m/Y')
-                            : '-',
-
-                        sprintf(
-                            '%06d',
-                            (int) $vale->numero_vale
-                        ),
-
-                        number_format(
-                            (float) $vale->cantidad_litros,
-                            2,
-                            ',',
-                            ''
-                        ),
-
-                        number_format(
-                            (float) $vale->precio_unitario,
-                            2,
-                            ',',
-                            ''
-                        ),
-
-                        number_format(
-                            (float) $vale->total,
-                            2,
-                            ',',
-                            ''
-                        ),
-
-                        $vale->numero_factura ?: '-',
-
-                        $vale->kilometraje ?? '-',
-
-                        $detalle,
-
-                        $vale->aperturaProgramatica?->codigo ?? '-',
-
-                    ], ';');
-                }
-
-
-                fputcsv($out, [
-
-                    'TOTAL',
-                    '',
-
-                    number_format(
-                        (float) $vales->sum('cantidad_litros'),
-                        2,
-                        ',',
-                        ''
-                    ),
-
-                    '',
-
-                    number_format(
-                        (float) $vales->sum('total'),
-                        2,
-                        ',',
-                        ''
-                    ),
-
-                    '',
-                    '',
-                    '',
-                    ''
-
-                ], ';');
-
-
-                fclose($out);
-
-            },
-            $nombre,
-            [
-                'Content-Type' =>
-                    'text/csv; charset=UTF-8'
-            ]
-        );
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | FUNCIONES AUXILIARES
-    |--------------------------------------------------------------------------
-    */
-
-    $esc = static fn ($valor) =>
-        htmlspecialchars(
-            (string) $valor,
-            ENT_XML1 | ENT_QUOTES,
-            'UTF-8'
-        );
-
-
-    $col = static function (int $numero): string {
-
-        $resultado = '';
-
-        while ($numero > 0) {
-
-            $numero--;
-
-            $resultado =
-                chr(65 + ($numero % 26)) .
-                $resultado;
-
-            $numero = intdiv(
-                $numero,
-                26
-            );
-        }
-
-        return $resultado;
-    };
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | FILAS DEL EXCEL
-    |--------------------------------------------------------------------------
-    */
-
-    $sheetRows = [];
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ENCABEZADO INSTITUCIONAL
-    |--------------------------------------------------------------------------
-    */
-
-    $sheetRows[] =
-        '<row r="1" ht="22" customHeight="1">' .
-            '<c r="A1" t="inlineStr" s="1">' .
-                '<is><t>' .
-                    $esc(
-                        'SECRETARIA MUNICIPAL DE FINANZAS Y ADMINISTRACION - DIRECCION ADMINISTRATIVA'
-                    ) .
-                '</t></is>' .
-            '</c>' .
-        '</row>';
-
-
-    $sheetRows[] =
-        '<row r="2" ht="22" customHeight="1">' .
-            '<c r="A2" t="inlineStr" s="2">' .
-                '<is><t>' .
-                    $esc(
-                        'REPORTE ASIGNACION DE COMBUSTIBLE'
-                    ) .
-                '</t></is>' .
-            '</c>' .
-        '</row>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | DATOS RELATIVOS AL VEHÍCULO
-    |--------------------------------------------------------------------------
-    */
-
-    $sheetRows[] =
-        '<row r="4">' .
-            '<c r="A4" t="inlineStr" s="6">' .
-                '<is><t>DATOS RELATIVOS AL VEHICULO</t></is>' .
-            '</c>' .
-        '</row>';
-
-
-    $datosVehiculoHeaders = [
-        'TIPO',
-        'COD. ASIGNADO',
-        'INDUSTRIA',
-        'COLOR',
-        'PLACA',
-        'MARCA',
-        
-    ];
-
-
-    $cells = [];
-
-    foreach ($datosVehiculoHeaders as $indice => $header) {
-
-        $referencia = $col($indice + 1) . '5';
-
-        $cells[] =
-            '<c r="' . $referencia .
-            '" t="inlineStr" s="3">' .
-                '<is><t>' .
-                    $esc($header) .
-                '</t></is>' .
-            '</c>';
-    }
-
-
-    $sheetRows[] =
-        '<row r="5">' .
-            implode('', $cells) .
-        '</row>';
-
-
-    $datosVehiculo = [
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
+    $sheet->setTitle('Vehiculo Individual');
+
+    $sheet->mergeCells('A1:I1');
+    $sheet->setCellValue('A1', 'SECRETARIA MUNICIPAL DE FINANZAS Y ADMINISTRACION - DIRECCION ADMINISTRATIVA');
+    $sheet->mergeCells('A2:I2');
+    $sheet->setCellValue('A2', 'REPORTE ASIGNACION DE COMBUSTIBLE');
+
+    $sheet->mergeCells('A4:F4');
+    $sheet->setCellValue('A4', 'DATOS RELATIVOS AL VEHICULO');
+
+    $sheet->fromArray([
+        'TIPO', 'COD. ASIGNADO', 'INDUSTRIA', 'COLOR', 'PLACA', 'MARCA'
+    ], null, 'A5');
+
+    $sheet->fromArray([
         $vehiculo->tipo ?: '-',
         $vehiculo->codigo ?: '-',
         $vehiculo->industria ?: '-',
         $vehiculo->color ?: '-',
         $vehiculo->placa ?: '-',
         $vehiculo->marca ?: '-',
-       
-    ];
+    ], null, 'A6');
 
+    $sheet->mergeCells('A8:I8');
+    $sheet->setCellValue('A8', 'DETALLE DE ASIGNACION');
 
-    $cells = [];
-
-    foreach ($datosVehiculo as $indice => $dato) {
-
-        $referencia = $col($indice + 1) . '6';
-
-        $cells[] =
-            '<c r="' .
-            $referencia .
-            '" t="inlineStr" s="7">' .
-
-                '<is><t>' .
-                    $esc($dato) .
-                '</t></is>' .
-
-            '</c>';
-    }
-
-
-    $sheetRows[] =
-        '<row r="6">' .
-            implode('', $cells) .
-        '</row>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | DETALLE
-    |--------------------------------------------------------------------------
-    */
-
-    $sheetRows[] =
-        '<row r="8">' .
-            '<c r="A8" t="inlineStr" s="6">' .
-                '<is><t>DETALLE DE ASIGNACION</t></is>' .
-            '</c>' .
-        '</row>';
-
-
-    $headers = [
+    $sheet->fromArray([
         'FECHA',
         'VALE',
         'CANTIDAD (LT)',
@@ -1451,561 +1066,82 @@ public function vehiculoIndividualExcel(Request $request)
         'KILOMETRAJE',
         'DETALLE DE ASIGNACIÓN',
         'APERTURA PROGRAM.'
-    ];
+    ], null, 'A9');
 
-
-    $r = 9;
-
-    $cells = [];
-
-
-    foreach ($headers as $indice => $header) {
-
-        $referencia =
-            $col($indice + 1) .
-            $r;
-
-        $cells[] =
-            '<c r="' .
-            $referencia .
-            '" t="inlineStr" s="3">' .
-
-                '<is><t>' .
-                    $esc($header) .
-                '</t></is>' .
-
-            '</c>';
-    }
-
-
-    $sheetRows[] =
-        '<row r="' .
-        $r .
-        '">' .
-            implode('', $cells) .
-        '</row>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | REGISTROS
-    |--------------------------------------------------------------------------
-    */
+    $fila = 10;
 
     foreach ($vales as $vale) {
-
-        $r++;
-
-
-        $detalle =
-            'ASIGNADO A ' .
-            mb_strtoupper(
-                $vehiculo->tipo ?: 'VEHÍCULO'
-            );
-
-
-        if ($vehiculo->unidad) {
-
-            $detalle .=
-                ' DE ' .
-                mb_strtoupper(
-                    $vehiculo->unidad->nombre ?? ''
-                );
-        }
-
-
-        $fila = [
-
-            [
-                's',
-                $vale->fecha
-                    ? $vale->fecha->format('d/m/Y')
-                    : '-'
-            ],
-
-            [
-                's',
-                sprintf(
-                    '%06d',
-                    (int) $vale->numero_vale
-                )
-            ],
-
-            [
-                'n',
-                round(
-                    (float) $vale->cantidad_litros,
-                    2
-                )
-            ],
-
-            [
-                'n',
-                round(
-                    (float) $vale->precio_unitario,
-                    2
-                )
-            ],
-
-            [
-                'n',
-                round(
-                    (float) $vale->total,
-                    2
-                )
-            ],
-
-            [
-                's',
-                $vale->numero_factura ?: '-'
-            ],
-
-            [
-                's',
-                $vale->kilometraje !== null
-                    ? (string) $vale->kilometraje
-                    : '-'
-            ],
-
-            [
-                's',
-                $detalle
-            ],
-
-            [
-                's',
-                $vale->aperturaProgramatica?->codigo
-                    ?? '-'
-            ],
-
-        ];
-
-
-        $cells = [];
-
-
-        foreach ($fila as $indice => $cell) {
-
-            [$tipo, $valor] = $cell;
-
-            $referencia =
-                $col($indice + 1) .
-                $r;
-
-
-            if ($tipo === 'n') {
-
-                $cells[] =
-                    '<c r="' .
-                    $referencia .
-                    '" s="5">' .
-
-                        '<v>' .
-                            ((float) $valor) .
-                        '</v>' .
-
-                    '</c>';
-
-            } else {
-
-                $cells[] =
-                    '<c r="' .
-                    $referencia .
-                    '" t="inlineStr" s="7">' .
-
-                        '<is><t>' .
-                            $esc($valor) .
-                        '</t></is>' .
-
-                    '</c>';
-            }
-        }
-
-
-        $sheetRows[] =
-            '<row r="' .
-            $r .
-            '">' .
-                implode('', $cells) .
-            '</row>';
+        $sheet->setCellValue('A' . $fila, $vale->fecha ? $vale->fecha->format('d/m/Y') : '-');
+        $sheet->setCellValueExplicit(
+            'B' . $fila,
+            sprintf('%06d', (int) $vale->numero_vale),
+            \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING
+        );
+        $sheet->setCellValue('C' . $fila, (float) $vale->cantidad_litros);
+        $sheet->setCellValue('D' . $fila, (float) $vale->precio_unitario);
+        $sheet->setCellValue('E' . $fila, (float) $vale->total);
+        $sheet->setCellValue('F' . $fila, $vale->numero_factura ?: '-');
+        $sheet->setCellValue('G' . $fila, $vale->kilometraje ?? '-');
+        $sheet->setCellValue('H' . $fila, $vale->detalle_asignacion ?? '');
+        $sheet->setCellValue('I' . $fila, $vale->aperturaProgramatica?->codigo ?? '-');
+        $fila++;
     }
 
-
-    /*
-    |--------------------------------------------------------------------------
-    | TOTAL
-    |--------------------------------------------------------------------------
-    */
-
-    $r++;
-
-
-    $totalLitros =
-        (float) $vales->sum(
-            'cantidad_litros'
-        );
-
-
-    $totalMonto =
-        (float) $vales->sum(
-            'total'
-        );
-
-
-    $sheetRows[] =
-        '<row r="' . $r . '">' .
-
-            '<c r="A' . $r .
-            '" t="inlineStr" s="4">' .
-                '<is><t>TOTAL</t></is>' .
-            '</c>' .
-
-            '<c r="B' . $r .
-            '" t="inlineStr" s="4">' .
-                '<is><t></t></is>' .
-            '</c>' .
-
-            '<c r="C' . $r .
-            '" s="8">' .
-                '<v>' .
-                    round($totalLitros, 2) .
-                '</v>' .
-            '</c>' .
-
-            '<c r="D' . $r .
-            '" t="inlineStr" s="4">' .
-                '<is><t></t></is>' .
-            '</c>' .
-
-            '<c r="E' . $r .
-            '" s="8">' .
-                '<v>' .
-                    round($totalMonto, 2) .
-                '</v>' .
-            '</c>' .
-
-            '<c r="F' . $r .
-            '" t="inlineStr" s="4">' .
-                '<is><t></t></is>' .
-            '</c>' .
-
-            '<c r="G' . $r .
-            '" t="inlineStr" s="4">' .
-                '<is><t></t></is>' .
-            '</c>' .
-
-            '<c r="H' . $r .
-            '" t="inlineStr" s="4">' .
-                '<is><t></t></is>' .
-            '</c>' .
-
-            '<c r="I' . $r .
-            '" t="inlineStr" s="4">' .
-                '<is><t></t></is>' .
-            '</c>' .
-
-        '</row>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | HOJA
-    |--------------------------------------------------------------------------
-    */
-
-    $sheet =
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-
-        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-
-            '<sheetViews>' .
-
-                '<sheetView workbookViewId="0">' .
-
-                    '<pane ' .
-                        'ySplit="9" ' .
-                        'topLeftCell="A10" ' .
-                        'activePane="bottomLeft" ' .
-                        'state="frozen"/>' .
-
-                '</sheetView>' .
-
-            '</sheetViews>' .
-
-
-            '<cols>' .
-
-                '<col min="1" max="1" width="14" customWidth="1"/>' .
-
-                '<col min="2" max="2" width="14" customWidth="1"/>' .
-
-                '<col min="3" max="5" width="17" customWidth="1"/>' .
-
-                '<col min="6" max="6" width="18" customWidth="1"/>' .
-
-                '<col min="7" max="7" width="18" customWidth="1"/>' .
-
-                '<col min="8" max="8" width="48" customWidth="1"/>' .
-
-                '<col min="9" max="9" width="22" customWidth="1"/>' .
-
-            '</cols>' .
-
-
-            '<sheetData>' .
-
-                implode(
-                    '',
-                    $sheetRows
-                ) .
-
-            '</sheetData>' .
-
-
-            '<autoFilter ref="A9:I' .
-                max(
-                    9,
-                    $r - 1
-                ) .
-            '"/>' .
-
-        '</worksheet>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ESTILOS
-    |--------------------------------------------------------------------------
-    */
-
-    $styles =
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-
-        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-
-            '<fonts count="4">' .
-
-                '<font>' .
-                    '<sz val="11"/>' .
-                    '<name val="Calibri"/>' .
-                '</font>' .
-
-                '<font>' .
-                    '<b/>' .
-                    '<sz val="14"/>' .
-                    '<color rgb="FF075326"/>' .
-                    '<name val="Calibri"/>' .
-                '</font>' .
-
-                '<font>' .
-                    '<b/>' .
-                    '<sz val="12"/>' .
-                    '<color rgb="FF08712F"/>' .
-                    '<name val="Calibri"/>' .
-                '</font>' .
-
-                '<font>' .
-                    '<b/>' .
-                    '<color rgb="FFFFFFFF"/>' .
-                    '<name val="Calibri"/>' .
-                '</font>' .
-
-            '</fonts>' .
-
-
-            '<fills count="4">' .
-
-                '<fill>' .
-                    '<patternFill patternType="none"/>' .
-                '</fill>' .
-
-                '<fill>' .
-                    '<patternFill patternType="gray125"/>' .
-                '</fill>' .
-
-                '<fill>' .
-                    '<patternFill patternType="solid">' .
-                        '<fgColor rgb="FF08712F"/>' .
-                        '<bgColor indexed="64"/>' .
-                    '</patternFill>' .
-                '</fill>' .
-
-                '<fill>' .
-                    '<patternFill patternType="solid">' .
-                        '<fgColor rgb="FFE7F4EB"/>' .
-                        '<bgColor indexed="64"/>' .
-                    '</patternFill>' .
-                '</fill>' .
-
-            '</fills>' .
-
-
-            '<borders count="2">' .
-
-                '<border/>' .
-
-                '<border>' .
-                    '<left style="thin"/>' .
-                    '<right style="thin"/>' .
-                    '<top style="thin"/>' .
-                    '<bottom style="thin"/>' .
-                '</border>' .
-
-            '</borders>' .
-
-
-            '<cellXfs count="9">' .
-
-                '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>' .
-
-                '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>' .
-
-                '<xf numFmtId="0" fontId="2" fillId="0" borderId="0"/>' .
-
-                '<xf numFmtId="0" fontId="3" fillId="2" borderId="1" applyFill="1" applyBorder="1"/>' .
-
-                '<xf numFmtId="0" fontId="3" fillId="2" borderId="1" applyFill="1" applyBorder="1"/>' .
-
-                '<xf numFmtId="4" fontId="0" fillId="0" borderId="1" applyNumberFormat="1" applyBorder="1"/>' .
-
-                '<xf numFmtId="0" fontId="2" fillId="3" borderId="1" applyFill="1" applyBorder="1"/>' .
-
-                '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" applyBorder="1"/>' .
-
-                '<xf numFmtId="4" fontId="0" fillId="3" borderId="1" applyFill="1" applyNumberFormat="1" applyBorder="1"/>' .
-
-            '</cellXfs>' .
-
-        '</styleSheet>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CREAR XLSX
-    |--------------------------------------------------------------------------
-    */
-
-    $tmp = tempnam(
-        sys_get_temp_dir(),
-        'sigecom_individual_'
-    );
-
-
-    $zip = new \ZipArchive();
-
-
-    $zip->open(
-        $tmp,
-        \ZipArchive::OVERWRITE
-    );
-
-
-    $zip->addFromString(
-        '[Content_Types].xml',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' .
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' .
-            '<Default Extension="xml" ContentType="application/xml"/>' .
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' .
-            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' .
-            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' .
-        '</Types>'
-    );
-
-
-    $zip->addFromString(
-        '_rels/.rels',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' .
-        '</Relationships>'
-    );
-
-
-    $zip->addFromString(
-        'xl/workbook.xml',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' .
-        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' .
-
-            '<sheets>' .
-                '<sheet name="Vehiculo Individual" sheetId="1" r:id="rId1"/>' .
-            '</sheets>' .
-
-        '</workbook>'
-    );
-
-
-    $zip->addFromString(
-        'xl/_rels/workbook.xml.rels',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
-
-            '<Relationship Id="rId1" ' .
-                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" ' .
-                'Target="worksheets/sheet1.xml"/>' .
-
-            '<Relationship Id="rId2" ' .
-                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" ' .
-                'Target="styles.xml"/>' .
-
-        '</Relationships>'
-    );
-
-
-    $zip->addFromString(
-        'xl/worksheets/sheet1.xml',
-        $sheet
-    );
-
-
-    $zip->addFromString(
-        'xl/styles.xml',
-        $styles
-    );
-
-
-    $zip->close();
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | DESCARGAR
-    |--------------------------------------------------------------------------
-    */
-
-    $nombre =
-        'SIGECOM_Reporte_individual_' .
-        preg_replace(
-            '/[^A-Za-z0-9_-]+/',
-            '_',
-            (string) $vehiculo->codigo
-        ) .
-        '_' .
-        now()->format('Ymd_His') .
-        '.xlsx';
-
-
-    return response()
-        ->download(
-            $tmp,
-            $nombre,
-            [
-                'Content-Type' =>
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-            ]
-        )
-        ->deleteFileAfterSend(true);
+    $filaTotal = $fila;
+    $sheet->setCellValue('A' . $filaTotal, 'TOTAL');
+    $sheet->setCellValue('C' . $filaTotal, (float) $vales->sum('cantidad_litros'));
+    $sheet->setCellValue('E' . $filaTotal, (float) $vales->sum('total'));
+
+    $estiloEncabezado = [
+        'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+        'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '08712F']],
+        'alignment' => [
+            'horizontal' => Alignment::HORIZONTAL_CENTER,
+            'vertical' => Alignment::VERTICAL_CENTER,
+        ],
+        'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]],
+    ];
+
+    $sheet->getStyle('A1:I1')->getFont()->setBold(true)->setSize(14);
+    $sheet->getStyle('A2:I2')->getFont()->setBold(true)->setSize(12);
+    $sheet->getStyle('A1:I2')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+    $sheet->getStyle('A4:F4')->getFont()->setBold(true);
+    $sheet->getStyle('A8:I8')->getFont()->setBold(true);
+    $sheet->getStyle('A5:F5')->applyFromArray($estiloEncabezado);
+    $sheet->getStyle('A9:I9')->applyFromArray($estiloEncabezado);
+    $sheet->getStyle('A5:F6')->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle('A9:I' . $filaTotal)->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle('A' . $filaTotal . ':I' . $filaTotal)->getFont()->setBold(true);
+    $sheet->getStyle('A' . $filaTotal . ':I' . $filaTotal)->getFill()
+        ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('E7F4EB');
+
+    if ($filaTotal > 10) {
+        $sheet->getStyle('C10:E' . ($filaTotal - 1))
+            ->getNumberFormat()->setFormatCode('#,##0.00');
+    }
+    $sheet->getStyle('C' . $filaTotal)->getNumberFormat()->setFormatCode('#,##0.00');
+    $sheet->getStyle('E' . $filaTotal)->getNumberFormat()->setFormatCode('#,##0.00');
+
+    foreach ([
+        'A' => 14, 'B' => 14, 'C' => 17, 'D' => 17, 'E' => 17,
+        'F' => 18, 'G' => 18, 'H' => 48, 'I' => 22,
+    ] as $columna => $ancho) {
+        $sheet->getColumnDimension($columna)->setWidth($ancho);
+    }
+
+    $sheet->freezePane('A10');
+    $sheet->setAutoFilter('A9:I' . max(9, $filaTotal - 1));
+
+    $nombre = 'SIGECOM_Reporte_individual_' .
+        preg_replace('/[^A-Za-z0-9_-]+/', '_', (string) $vehiculo->codigo) . '_' .
+        now()->format('Ymd_His') . '.xlsx';
+
+    return $this->descargarExcel($spreadsheet, $nombre, 'sigecom_individual_');
 }
-    /*
-|--------------------------------------------------------------------------
-| REPORTE POR APERTURA PROGRAMÁTICA
-|--------------------------------------------------------------------------
-*/
-public function porApertura(Request $request)
+
+    public function porApertura(Request $request)
 {
-    $consulta = ValeCombustible::conConsumo()->with([
+    $consulta = $this->consultaConsumo($request)->with([
         'vehiculo.unidad',
         'tipoCombustible',
         'periodo',
@@ -2013,16 +1149,12 @@ public function porApertura(Request $request)
         'aperturaProgramatica.organismoFinanciador',
         'estacionServicio',
     ]);
-
-    // APERTURA PROGRAMÁTICA
     if ($request->filled('apertura_programatica_id')) {
         $consulta->where(
             'apertura_programatica_id',
             $request->apertura_programatica_id
         );
     }
-
-    // PERÍODO
     if ($request->filled('periodo_id')) {
         $consulta->where(
             'periodo_id',
@@ -2030,34 +1162,12 @@ public function porApertura(Request $request)
         );
     }
 
-    // FECHA INICIAL
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
-        );
-    }
-
-    // FECHA FINAL
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
+    $this->aplicarFiltrosFecha($consulta, $request);
 
     $vales = $consulta
         ->orderBy('apertura_programatica_id')
         ->orderBy('fecha')
         ->get();
-
-    /*
-    |--------------------------------------------------------------------------
-    | AGRUPAR POR AP + FF + OF + UNIDAD
-    |--------------------------------------------------------------------------
-    */
 
    $reporte = $vales
     ->groupBy(function ($vale) {
@@ -2095,17 +1205,10 @@ public function porApertura(Request $request)
                 $unidad?->nombre
                 ?? $apertura?->descripcion
                 ?? '-',
-
-            // SE SUMAN LOS LITROS
             'litros' =>
                 (float) $grupo->sum('cantidad_litros'),
-
-            // NO SE SUMA EL PRECIO
-            // SE MUESTRA EL PRECIO REGISTRADO EN EL VALE
             'precio_unitario' =>
                 (float) $primerVale->precio_unitario,
-
-            // SE SUMAN LOS TOTALES
             'total' =>
                 (float) $grupo->sum('total'),
 
@@ -2114,11 +1217,6 @@ public function porApertura(Request $request)
         ];
     })
     ->values();
-    /*
-    |--------------------------------------------------------------------------
-    | TOTALES
-    |--------------------------------------------------------------------------
-    */
 
     $totalVales = $vales->count();
 
@@ -2131,12 +1229,6 @@ public function porApertura(Request $request)
     $totalLitros = (float) $vales->sum('cantidad_litros');
 
     $totalMonto = (float) $vales->sum('total');
-
-    /*
-    |--------------------------------------------------------------------------
-    | FILTROS
-    |--------------------------------------------------------------------------
-    */
 
     $aperturas = AperturaProgramatica::where('estado', true)
         ->with([
@@ -2161,104 +1253,6 @@ public function porApertura(Request $request)
         'totalMonto'
     ));
 }
-
-    /**
-     * Genera un XLSX real sin depender de HTML interpretado por Excel.
-     * Los identificadores se escriben como texto (conserva 001006) y los
-     * importes/litros como números reales, evitando que Excel en configuración
-     * regional española convierta 53.017... en 5.301.7... por interpretar el
-     * punto como separador de miles.
-     */
-    private function respuestaExcel($vales, string $titulo)
-    {
-        if (!class_exists(\ZipArchive::class)) {
-            // Fallback seguro: CSV UTF-8 separado por punto y coma, compatible con Excel ES.
-            $nombre = 'SIGECOM_'.preg_replace('/[^A-Za-z0-9_-]+/', '_', $titulo).'_'.now()->format('Ymd_His').'.csv';
-            return response()->streamDownload(function () use ($vales) {
-                $out = fopen('php://output', 'w');
-                fwrite($out, "\xEF\xBB\xBF");
-                fputcsv($out, ['Fecha','Vale','Código','Placa','Unidad','Combustible','Apertura','Factura','Litros','Precio unitario','Total Bs'], ';');
-                foreach ($vales as $v) {
-                    fputcsv($out, [
-                        optional($v->fecha)->format('d/m/Y'), (string)$v->numero_vale,
-                        optional($v->vehiculo)->codigo, optional($v->vehiculo)->placa,
-                        optional(optional($v->vehiculo)->unidad)->nombre,
-                        optional($v->tipoCombustible)->nombre,
-                        optional($v->aperturaProgramatica)->codigo, (string)$v->numero_factura,
-                        number_format((float)$v->cantidad_litros, 2, ',', ''),
-                        number_format((float)$v->precio_unitario, 4, ',', ''),
-                        number_format((float)$v->total, 2, ',', ''),
-                    ], ';');
-                }
-                fclose($out);
-            }, $nombre, ['Content-Type'=>'text/csv; charset=UTF-8']);
-        }
-
-        $headers = ['Fecha','Vale','Código','Placa','Unidad','Combustible','Apertura','Factura','Litros','Precio unitario','Total Bs'];
-        $rows = [];
-        foreach ($vales as $v) {
-            $rows[] = [
-                ['s', optional($v->fecha)->format('d/m/Y')],
-                ['s', (string)$v->numero_vale],
-                ['s', (string)optional($v->vehiculo)->codigo],
-                ['s', (string)optional($v->vehiculo)->placa],
-                ['s', (string)optional(optional($v->vehiculo)->unidad)->nombre],
-                ['s', (string)optional($v->tipoCombustible)->nombre],
-                ['s', (string)optional($v->aperturaProgramatica)->codigo],
-                ['s', (string)$v->numero_factura],
-                ['n', round((float)$v->cantidad_litros, 2)],
-                ['n', round((float)$v->precio_unitario, 4)],
-                ['n', round((float)$v->total, 2)],
-            ];
-        }
-        $rows[] = [
-            ['s','TOTALES'],['s',''],['s',''],['s',''],['s',''],['s',''],['s',''],['s',''],
-            ['n', round((float)$vales->sum('cantidad_litros'), 2)], ['s',''],
-            ['n', round((float)$vales->sum('total'), 2)],
-        ];
-
-        $esc = static fn($v) => htmlspecialchars((string)$v, ENT_XML1 | ENT_QUOTES, 'UTF-8');
-        $col = static function (int $n): string { $r=''; while($n>0){$n--; $r=chr(65+($n%26)).$r; $n=intdiv($n,26);} return $r; };
-        $sheetRows = [];
-        $r = 1;
-        $title = $esc(str_replace('_',' ', $titulo));
-        $sheetRows[] = '<row r="1"><c r="A1" t="inlineStr" s="1"><is><t>Gobierno Autónomo Municipal de Sacaba - SIGECOM</t></is></c></row>';
-        $sheetRows[] = '<row r="2"><c r="A2" t="inlineStr" s="2"><is><t>'.$title.'</t></is></c></row>';
-        $r=4; $cells=[];
-        foreach($headers as $i=>$h){$ref=$col($i+1).$r; $cells[]='<c r="'.$ref.'" t="inlineStr" s="3"><is><t>'.$esc($h).'</t></is></c>';}
-        $sheetRows[]='<row r="'.$r.'">'.implode('',$cells).'</row>';
-        foreach($rows as $ri=>$row){
-            $r++; $cells=[]; $isTotal=$ri===count($rows)-1;
-            foreach($row as $i=>$cell){ [$type,$value]=$cell; $ref=$col($i+1).$r; $style=$isTotal?4:($type==='n'?5:0);
-                if($type==='n') $cells[]='<c r="'.$ref.'" s="'.$style.'"><v>'.((float)$value).'</v></c>';
-                else $cells[]='<c r="'.$ref.'" t="inlineStr" s="'.$style.'"><is><t>'.$esc($value).'</t></is></c>';
-            }
-            $sheetRows[]='<row r="'.$r.'">'.implode('',$cells).'</row>';
-        }
-        $sheet='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><cols><col min="1" max="1" width="13" customWidth="1"/><col min="2" max="4" width="14" customWidth="1"/><col min="5" max="5" width="38" customWidth="1"/><col min="6" max="8" width="18" customWidth="1"/><col min="9" max="11" width="16" customWidth="1"/></cols><sheetData>'.implode('',$sheetRows).'</sheetData><autoFilter ref="A4:K'.max(4,$r-1).'"/><sheetViews><sheetView workbookViewId="0"><pane ySplit="4" topLeftCell="A5" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews></worksheet>';
-        $styles='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="3"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="14"/><color rgb="FF173F32"/><name val="Calibri"/></font><font><b/><sz val="12"/><color rgb="FF198754"/><name val="Calibri"/></font></fonts><fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEAF4EF"/><bgColor indexed="64"/></patternFill></fill></fills><borders count="2"><border/><border><left style="thin"/><right style="thin"/><top style="thin"/><bottom style="thin"/></border></borders><cellXfs count="6"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0"/><xf numFmtId="0" fontId="2" fillId="0" borderId="0"/><xf numFmtId="0" fontId="0" fillId="2" borderId="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyFill="1" applyBorder="1"/><xf numFmtId="4" fontId="0" fillId="0" borderId="1" applyNumberFormat="1" applyBorder="1"/></cellXfs></styleSheet>';
-        $tmp=tempnam(sys_get_temp_dir(),'sigecom_xlsx_'); $zip=new \ZipArchive(); $zip->open($tmp, \ZipArchive::OVERWRITE);
-        $zip->addFromString('[Content_Types].xml','<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>');
-        $zip->addFromString('_rels/.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>');
-        $zip->addFromString('xl/workbook.xml','<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Reporte" sheetId="1" r:id="rId1"/></sheets></workbook>');
-        $zip->addFromString('xl/_rels/workbook.xml.rels','<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>');
-        $zip->addFromString('xl/worksheets/sheet1.xml',$sheet); $zip->addFromString('xl/styles.xml',$styles); $zip->close();
-        $nombre='SIGECOM_'.preg_replace('/[^A-Za-z0-9_-]+/','_',$titulo).'_'.now()->format('Ymd_His').'.xlsx';
-        return response()->download($tmp,$nombre,['Content-Type'=>'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])->deleteFileAfterSend(true);
-    }
-
-    private function consultaExportacion(Request $request)
-    {
-        return ValeCombustible::conConsumo()->with(['vehiculo.unidad','tipoCombustible','periodo','aperturaProgramatica','estacionServicio'])
-            ->when($request->filled('fecha_inicio'), fn($q)=>$q->whereDate('fecha','>=',$request->fecha_inicio))
-            ->when($request->filled('fecha_fin'), fn($q)=>$q->whereDate('fecha','<=',$request->fecha_fin))
-            ->when($request->filled('vehiculo_id'), fn($q)=>$q->where('vehiculo_id',$request->vehiculo_id))
-            ->when($request->filled('unidad_id'), fn($q)=>$q->whereHas('vehiculo',fn($v)=>$v->where('unidad_id',$request->unidad_id)))
-            ->when($request->filled('periodo_id'), fn($q)=>$q->where('periodo_id',$request->periodo_id))
-            ->when($request->filled('apertura_programatica_id'), fn($q)=>$q->where('apertura_programatica_id',$request->apertura_programatica_id));
-    }
-
-
     public function consumoExcel(Request $request)
     {
         $request->validate([
@@ -2268,18 +1262,12 @@ public function porApertura(Request $request)
             'unidad_id' => ['nullable', 'integer', 'exists:unidades,id'],
         ]);
 
-        $consulta = ValeCombustible::conConsumo()->with([
+        $consulta = $this->consultaConsumo($request)->with([
             'vehiculo.unidad',
             'tipoCombustible',
         ]);
 
-        if ($request->filled('fecha_inicio')) {
-            $consulta->whereDate('fecha', '>=', $request->fecha_inicio);
-        }
-
-        if ($request->filled('fecha_fin')) {
-            $consulta->whereDate('fecha', '<=', $request->fecha_fin);
-        }
+    $this->aplicarFiltrosFecha($consulta, $request);
 
         if ($request->filled('vehiculo_id')) {
             $consulta->where('vehiculo_id', $request->vehiculo_id);
@@ -2342,22 +1330,10 @@ public function porApertura(Request $request)
         $totalDiesel = (float) $resumenUnidades->sum('diesel');
         $totalOtros = (float) $resumenUnidades->sum('otros');
 
-                /*
-        |--------------------------------------------------------------------------
-        | GENERAR EXCEL CON PHPSPREADSHEET
-        |--------------------------------------------------------------------------
-        */
-
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
 
         $sheet->setTitle('Reporte General');
-
-        /*
-        |--------------------------------------------------------------------------
-        | TÍTULOS
-        |--------------------------------------------------------------------------
-        */
 
         $sheet->mergeCells('A1:H1');
         $sheet->setCellValue(
@@ -2383,12 +1359,6 @@ public function porApertura(Request $request)
             ->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_CENTER);
 
-        /*
-        |--------------------------------------------------------------------------
-        | RESUMEN GENERAL
-        |--------------------------------------------------------------------------
-        */
-
         $sheet->setCellValue('A4', 'VALES UTILIZADOS');
         $sheet->setCellValue('B4', 'VEHÍCULOS');
         $sheet->setCellValue('C4', 'COMBUSTIBLE CONSUMIDO (L)');
@@ -2398,12 +1368,6 @@ public function porApertura(Request $request)
         $sheet->setCellValue('B5', $totalVehiculos);
         $sheet->setCellValue('C5', $totalLitros);
         $sheet->setCellValue('D5', $totalMonto);
-
-        /*
-        |--------------------------------------------------------------------------
-        | CABECERA DE TABLA
-        |--------------------------------------------------------------------------
-        */
 
         $filaCabecera = 7;
 
@@ -2424,12 +1388,6 @@ public function porApertura(Request $request)
                 $titulo
             );
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | DATOS POR UNIDAD
-        |--------------------------------------------------------------------------
-        */
 
         $fila = 8;
 
@@ -2478,12 +1436,6 @@ public function porApertura(Request $request)
             $fila++;
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | TOTAL GENERAL
-        |--------------------------------------------------------------------------
-        */
-
         $sheet->setCellValue('A' . $fila, 'TOTAL GENERAL');
         $sheet->setCellValue('B' . $fila, $totalVehiculos);
         $sheet->setCellValue('C' . $fila, $totalVales);
@@ -2492,12 +1444,6 @@ public function porApertura(Request $request)
         $sheet->setCellValue('F' . $fila, $totalOtros);
         $sheet->setCellValue('G' . $fila, $totalLitros);
         $sheet->setCellValue('H' . $fila, $totalMonto);
-
-        /*
-        |--------------------------------------------------------------------------
-        | ESTILO VERDE SIGECOM
-        |--------------------------------------------------------------------------
-        */
 
         $estiloEncabezado = [
             'font' => [
@@ -2532,12 +1478,6 @@ public function porApertura(Request $request)
         $sheet->getStyle('A7:H7')
             ->applyFromArray($estiloEncabezado);
 
-        /*
-        |--------------------------------------------------------------------------
-        | BORDES DE LOS DATOS
-        |--------------------------------------------------------------------------
-        */
-
         $sheet->getStyle('A5:D5')
             ->getBorders()
             ->getAllBorders()
@@ -2547,12 +1487,6 @@ public function porApertura(Request $request)
             ->getBorders()
             ->getAllBorders()
             ->setBorderStyle(Border::BORDER_THIN);
-
-        /*
-        |--------------------------------------------------------------------------
-        | TOTAL GENERAL
-        |--------------------------------------------------------------------------
-        */
 
         $sheet->getStyle('A' . $fila . ':H' . $fila)
             ->getFont()
@@ -2564,12 +1498,6 @@ public function porApertura(Request $request)
             ->getStartColor()
             ->setRGB('E7F4EB');
 
-        /*
-        |--------------------------------------------------------------------------
-        | FORMATO NUMÉRICO
-        |--------------------------------------------------------------------------
-        */
-
         $sheet->getStyle('C5:D5')
             ->getNumberFormat()
             ->setFormatCode('#,##0.00');
@@ -2580,12 +1508,6 @@ public function porApertura(Request $request)
                 ->setFormatCode('#,##0.00');
         }
 
-        /*
-        |--------------------------------------------------------------------------
-        | TAMAÑO DE COLUMNAS
-        |--------------------------------------------------------------------------
-        */
-
         $sheet->getColumnDimension('A')->setWidth(45);
         $sheet->getColumnDimension('B')->setWidth(14);
         $sheet->getColumnDimension('C')->setWidth(14);
@@ -2595,12 +1517,6 @@ public function porApertura(Request $request)
         $sheet->getColumnDimension('G')->setWidth(18);
         $sheet->getColumnDimension('H')->setWidth(22);
 
-        /*
-        |--------------------------------------------------------------------------
-        | CONGELAR CABECERA Y FILTROS
-        |--------------------------------------------------------------------------
-        */
-
         $sheet->freezePane('A8');
 
         if ($fila > 8) {
@@ -2608,12 +1524,6 @@ public function porApertura(Request $request)
                 'A7:H' . ($fila - 1)
             );
         }
-
-        /*
-        |--------------------------------------------------------------------------
-        | DESCARGAR XLSX
-        |--------------------------------------------------------------------------
-        */
 
         $nombre =
             'SIGECOM_Reporte_general_consumo_' .
@@ -2647,54 +1557,36 @@ public function porApertura(Request $request)
 
     public function vehiculosExcel(Request $request)
 {
-    /*
-    |--------------------------------------------------------------------------
-    | CONSULTA
-    |--------------------------------------------------------------------------
-    */
+        $request->validate([
+            'observaciones' => ['nullable', 'string', 'max:2000'],
+        ]);
 
-    $consulta = ValeCombustible::conConsumo()->with([
-        'vehiculo.unidad',
-        'aperturaProgramatica.fuenteFinanciamiento',
-        'aperturaProgramatica.organismoFinanciador',
+        $consulta = $this->consultaConsumo($request)->with([
+            'vehiculo.unidad',
+            'tipoCombustible',
+            'aperturaProgramatica.fuenteFinanciamiento',
+            'aperturaProgramatica.organismoFinanciador',
     ]);
 
-    if ($request->filled('vehiculo_id')) {
-        $consulta->where(
-            'vehiculo_id',
-            $request->vehiculo_id
+    $consulta
+        ->when(
+            $request->filled('vehiculo_id'),
+            fn ($q) => $q->where('vehiculo_id', $request->vehiculo_id)
+        )
+        ->when(
+            $request->filled('fecha_inicio'),
+            fn ($q) => $q->whereDate('fecha', '>=', $request->fecha_inicio)
+        )
+        ->when(
+            $request->filled('fecha_fin'),
+            fn ($q) => $q->whereDate('fecha', '<=', $request->fecha_fin)
         );
-    }
-
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
-        );
-    }
-
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
 
     $vales = $consulta
         ->orderBy('vehiculo_id')
         ->orderBy('fecha')
         ->orderBy('numero_vale')
         ->get();
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | PARTES DIARIOS
-    |--------------------------------------------------------------------------
-    */
-
     $vehiculoIds = $vales
         ->pluck('vehiculo_id')
         ->filter()
@@ -2704,254 +1596,54 @@ public function porApertura(Request $request)
     $partesDiarios = collect();
 
     if ($vehiculoIds->isNotEmpty() && $vales->isNotEmpty()) {
+        $fechaMinima = $vales->pluck('fecha')->filter()->min();
+        $fechaMaxima = $vales->pluck('fecha')->filter()->max();
 
-        $fechaMinima = $vales
-            ->pluck('fecha')
-            ->filter()
-            ->min();
-
-        $fechaMaxima = $vales
-            ->pluck('fecha')
-            ->filter()
-            ->max();
-
-        $partesDiarios = ParteDiario::whereIn(
-                'vehiculo_id',
-                $vehiculoIds
-            )
+        $partesDiarios = ParteDiario::whereIn('vehiculo_id', $vehiculoIds)
             ->when(
                 $fechaMinima,
-                fn ($query) =>
-                    $query->whereDate(
-                        'fecha',
-                        '>=',
-                        $fechaMinima
-                    )
+                fn ($q) => $q->whereDate('fecha', '>=', $fechaMinima)
             )
             ->when(
                 $fechaMaxima,
-                fn ($query) =>
-                    $query->whereDate(
-                        'fecha',
-                        '<=',
-                        $fechaMaxima
-                    )
+                fn ($q) => $q->whereDate('fecha', '<=', $fechaMaxima)
             )
             ->get()
-            ->keyBy(function ($parte) {
-
-                return $parte->vehiculo_id
-                    . '|'
-                    . $parte->fecha->format('Y-m-d');
-
-            });
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | PREPARAR REPORTE
-    |--------------------------------------------------------------------------
-    */
-
-    $reporte = $vales
-        ->map(function ($vale) use ($partesDiarios) {
-
-            $vehiculo = $vale->vehiculo;
-
-            $apertura = $vale->aperturaProgramatica;
-
-            $fecha = $vale->fecha
-                ? $vale->fecha->format('Y-m-d')
-                : null;
-
-            $claveParte = $vale->vehiculo_id
-                . '|'
-                . $fecha;
-
-            $parte = $partesDiarios->get(
-                $claveParte
+            ->keyBy(
+                fn ($parte) =>
+                    $parte->vehiculo_id . '|' . $parte->fecha->format('Y-m-d')
             );
-
-            if (!$parte) {
-
-                $presentacionParte = 'SIN REGISTRO';
-
-            } elseif ($parte->presentado) {
-
-                $presentacionParte = 'SÍ';
-
-            } else {
-
-                $presentacionParte = 'NO';
-            }
-
-            return [
-                'codigo' =>
-                    $vehiculo?->codigo ?? '-',
-
-                'placa' =>
-                    $vehiculo?->placa ?? '-',
-
-                'parte_diario' =>
-                    $presentacionParte,
-
-                'tipo_vehiculo' =>
-                    $vehiculo?->tipo
-                    ?? $vehiculo?->tipo_vehiculo
-                    ?? '-',
-
-                'apertura' =>
-                    $apertura?->codigo ?? '-',
-
-                'fuente' =>
-                    $apertura?->fuenteFinanciamiento?->codigo
-                    ?? '-',
-
-                'organismo' =>
-                    $apertura?->organismoFinanciador?->codigo
-                    ?? '-',
-
-                'litros' =>
-                    (float) ($vale->cantidad_litros ?? 0),
-
-                'precio_unitario' =>
-                    (float) ($vale->precio_unitario ?? 0),
-
-                'total' =>
-                    (float) ($vale->total ?? 0),
-            ];
-
-        })
-        ->values();
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CSV SI ZIPARCHIVE NO ESTÁ DISPONIBLE
-    |--------------------------------------------------------------------------
-    */
-
-    if (!class_exists(\ZipArchive::class)) {
-
-        $nombre =
-            'SIGECOM_Reporte_por_vehiculo_' .
-            now()->format('Ymd_His') .
-            '.csv';
-
-        return response()->streamDownload(
-            function () use ($reporte) {
-
-                $out = fopen(
-                    'php://output',
-                    'w'
-                );
-
-                fwrite(
-                    $out,
-                    "\xEF\xBB\xBF"
-                );
-
-                fputcsv($out, [
-                    'N°',
-                    'CODIGO DE VEHICULO',
-                    'PLACA',
-                    'PRESENTACION PARTE DIARIO',
-                    'TIPO DE VEHICULO',
-                    'AP. PROGR.',
-                    'FF',
-                    'OF',
-                    'CANTIDAD LITROS',
-                    'P. U. (BS/LITRO)',
-                    'PRECIO TOTAL (BS)',
-                ], ';');
-
-
-                foreach ($reporte as $indice => $fila) {
-
-                    fputcsv($out, [
-                        $indice + 1,
-                        $fila['codigo'],
-                        $fila['placa'],
-                        $fila['parte_diario'],
-                        $fila['tipo_vehiculo'],
-                        $fila['apertura'],
-                        $fila['fuente'],
-                        $fila['organismo'],
-
-                        number_format(
-                            $fila['litros'],
-                            2,
-                            ',',
-                            ''
-                        ),
-
-                        number_format(
-                            $fila['precio_unitario'],
-                            2,
-                            ',',
-                            ''
-                        ),
-
-                        number_format(
-                            $fila['total'],
-                            2,
-                            ',',
-                            ''
-                        ),
-
-                    ], ';');
-                }
-
-
-                fputcsv($out, [
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    '',
-                    'TOTAL',
-
-                    number_format(
-                        $reporte->sum('litros'),
-                        2,
-                        ',',
-                        ''
-                    ),
-
-                    '',
-
-                    number_format(
-                        $reporte->sum('total'),
-                        2,
-                        ',',
-                        ''
-                    ),
-
-                ], ';');
-
-
-                fclose($out);
-
-            },
-            $nombre,
-            [
-                'Content-Type' =>
-                    'text/csv; charset=UTF-8'
-            ]
-        );
     }
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
 
+    $sheet->setTitle('Vehiculos');
+    $sheet->mergeCells('A1:N1');
+    $sheet->setCellValue(
+        'A1',
+        'SECRETARIA MUNICIPAL DE FINANZAS Y ADMINISTRACION - DIRECCION ADMINISTRATIVA'
+    );
 
-    /*
-    |--------------------------------------------------------------------------
-    | ENCABEZADOS
-    |--------------------------------------------------------------------------
-    */
+    $sheet->mergeCells('A2:N2');
+    $sheet->setCellValue(
+        'A2',
+        'REPORTE ASIGNACION DE COMBUSTIBLE POR VEHICULO'
+    );
 
-    $headers = [
+    $sheet->mergeCells('A3:N3');
+    $sheet->setCellValue(
+        'A3',
+        'DETALLE DE ASIGNACION DE COMBUSTIBLE'
+    );
+    $etiquetas = $this->etiquetasReporteVehiculos($request);
+    $sheet->mergeCells('A4:N4');
+    $sheet->setCellValue(
+        'A4',
+        'PERÍODO: ' . $etiquetas['periodo']
+            . ' | ÁMBITO: ' . $etiquetas['ambito']
+            . ' | COMBUSTIBLE: ' . $etiquetas['combustible']
+    );
+    $encabezados = [
         'N°',
         'CODIGO DE VEHICULO',
         'PLACA',
@@ -2963,539 +1655,172 @@ public function porApertura(Request $request)
         'CANTIDAD LITROS',
         'P. U. (BS/LITRO)',
         'PRECIO TOTAL (BS)',
+        'FECHA',
+        'N.º VALE',
+        'COMBUSTIBLE',
     ];
 
+    $sheet->fromArray(
+        $encabezados,
+        null,
+        'A5'
+    );
+    $fila = 6;
 
-    /*
-    |--------------------------------------------------------------------------
-    | FILAS
-    |--------------------------------------------------------------------------
-    */
+    foreach ($vales as $indice => $vale) {
+        $vehiculo = $vale->vehiculo;
+        $apertura = $vale->aperturaProgramatica;
 
-    $rows = [];
+        $fecha = $vale->fecha
+            ? $vale->fecha->format('Y-m-d')
+            : null;
 
-    foreach ($reporte as $indice => $fila) {
-
-        $rows[] = [
-
-            ['n', $indice + 1],
-
-            ['s', (string) $fila['codigo']],
-
-            ['s', (string) $fila['placa']],
-
-            ['s', (string) $fila['parte_diario']],
-
-            ['s', (string) $fila['tipo_vehiculo']],
-
-            ['s', (string) $fila['apertura']],
-
-            ['s', (string) $fila['fuente']],
-
-            ['s', (string) $fila['organismo']],
-
-            [
-                'n',
-                round(
-                    (float) $fila['litros'],
-                    2
-                )
-            ],
-
-            [
-                'n',
-                round(
-                    (float) $fila['precio_unitario'],
-                    2
-                )
-            ],
-
-            [
-                'n',
-                round(
-                    (float) $fila['total'],
-                    2
-                )
-            ],
-        ];
-    }
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | TOTAL
-    |--------------------------------------------------------------------------
-    */
-
-    $rows[] = [
-
-        ['s', ''],
-        ['s', ''],
-        ['s', ''],
-        ['s', ''],
-        ['s', ''],
-        ['s', ''],
-        ['s', ''],
-
-        ['s', 'TOTAL'],
-
-        [
-            'n',
-            round(
-                (float) $reporte->sum('litros'),
-                2
-            )
-        ],
-
-        // P.U. NO SE SUMA
-        ['s', ''],
-
-        [
-            'n',
-            round(
-                (float) $reporte->sum('total'),
-                2
-            )
-        ],
-    ];
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | FUNCIONES AUXILIARES
-    |--------------------------------------------------------------------------
-    */
-
-    $esc = static fn ($valor) =>
-        htmlspecialchars(
-            (string) $valor,
-            ENT_XML1 | ENT_QUOTES,
-            'UTF-8'
+        $parte = $partesDiarios->get(
+            $vale->vehiculo_id . '|' . $fecha
         );
 
+        $presentacionParte = !$parte
+            ? 'SIN REGISTRO'
+            : ($parte->presentado ? 'SÍ' : 'NO');
 
-    $col = static function (int $numero): string {
+        $sheet->fromArray([
+            $indice + 1,
+            $vehiculo?->codigo ?? '-',
+            $vehiculo?->placa ?? '-',
+            $presentacionParte,
+            $vehiculo?->tipo
+                ?? $vehiculo?->tipo_vehiculo
+                ?? '-',
+            $apertura?->codigo ?? '-',
+            $apertura?->fuenteFinanciamiento?->codigo ?? '-',
+            $apertura?->organismoFinanciador?->codigo ?? '-',
+            (float) ($vale->cantidad_litros ?? 0),
+            (float) ($vale->precio_unitario ?? 0),
+            (float) ($vale->total ?? 0),
+            $vale->fecha?->format('d/m/Y') ?? '-',
+            sprintf('%06d', (int) $vale->numero_vale),
+            $vale->tipoCombustible?->nombre ?? '-',
+        ], null, 'A' . $fila);
 
-        $resultado = '';
+        $fila++;
+    }
+    $filaTotal = $fila;
 
-        while ($numero > 0) {
+    $sheet->setCellValue(
+        'H' . $filaTotal,
+        'TOTAL'
+    );
 
-            $numero--;
+    $sheet->setCellValue(
+        'I' . $filaTotal,
+        (float) $vales->sum('cantidad_litros')
+    );
 
-            $resultado =
-                chr(
-                    65 + ($numero % 26)
-                )
-                . $resultado;
+    $sheet->setCellValue(
+        'K' . $filaTotal,
+        (float) $vales->sum('total')
+    );
+    $sheet->getStyle('A1:N1')->getFont()
+        ->setBold(true)
+        ->setSize(14);
 
-            $numero = intdiv(
-                $numero,
-                26
-            );
-        }
+    $sheet->getStyle('A2:N3')->getFont()
+        ->setBold(true)
+        ->setSize(12);
 
-        return $resultado;
-    };
+    $sheet->getStyle('A1:N3')
+        ->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+        ->setVertical(Alignment::VERTICAL_CENTER);
+    $sheet->getStyle('A5:N5')->getFont()
+        ->setBold(true);
 
+    $sheet->getStyle('A5:N5')
+        ->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+        ->setVertical(Alignment::VERTICAL_CENTER)
+        ->setWrapText(true);
 
-    /*
-    |--------------------------------------------------------------------------
-    | CONTENIDO DEL EXCEL
-    |--------------------------------------------------------------------------
-    */
+    $sheet->getStyle('A5:N5')
+        ->getFill()
+        ->setFillType(Fill::FILL_SOLID)
+        ->getStartColor()
+        ->setARGB('FFEAF4EF');
+    $sheet->getStyle(
+        'A5:N' . $filaTotal
+    )->getBorders()->getAllBorders()
+        ->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle(
+        'H' . $filaTotal . ':K' . $filaTotal
+    )->getFont()->setBold(true);
 
-    $sheetRows = [];
-
-
-    // Institución
-    $sheetRows[] =
-        '<row r="1">' .
-            '<c r="A1" t="inlineStr" s="1">' .
-                '<is><t>' .
-                    $esc(
-                        'SECRETARIA MUNICIPAL DE FINANZAS Y ADMINISTRACION - DIRECCION ADMINISTRATIVA'
-                    ) .
-                '</t></is>' .
-            '</c>' .
-        '</row>';
-
-
-    // Título
-    $sheetRows[] =
-        '<row r="2">' .
-            '<c r="A2" t="inlineStr" s="2">' .
-                '<is><t>' .
-                    $esc(
-                        'REPORTE ASIGNACION DE COMBUSTIBLE POR VEHICULO'
-                    ) .
-                '</t></is>' .
-            '</c>' .
-        '</row>';
-
-
-    // Detalle
-    $sheetRows[] =
-        '<row r="3">' .
-            '<c r="A3" t="inlineStr" s="2">' .
-                '<is><t>' .
-                    $esc(
-                        'DETALLE DE ASIGNACION DE COMBUSTIBLE'
-                    ) .
-                '</t></is>' .
-            '</c>' .
-        '</row>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ENCABEZADOS TABLA
-    |--------------------------------------------------------------------------
-    */
-
-    $r = 5;
-
-    $cells = [];
-
-    foreach ($headers as $indice => $header) {
-
-        $referencia =
-            $col($indice + 1) . $r;
-
-        $cells[] =
-            '<c r="' .
-            $referencia .
-            '" t="inlineStr" s="3">' .
-
-                '<is><t>' .
-                    $esc($header) .
-                '</t></is>' .
-
-            '</c>';
+    $sheet->getStyle(
+        'H' . $filaTotal . ':K' . $filaTotal
+    )->getFill()
+        ->setFillType(Fill::FILL_SOLID)
+        ->getStartColor()
+        ->setARGB('FFEAF4EF');
+    if ($filaTotal > 6) {
+        $sheet->getStyle(
+            'I6:K' . ($filaTotal - 1)
+        )->getNumberFormat()->setFormatCode('#,##0.00');
     }
 
-    $sheetRows[] =
-        '<row r="' . $r . '">' .
-            implode('', $cells) .
-        '</row>';
+    $sheet->getStyle(
+        'I' . $filaTotal
+    )->getNumberFormat()->setFormatCode('#,##0.00');
 
+    $sheet->getStyle(
+        'K' . $filaTotal
+    )->getNumberFormat()->setFormatCode('#,##0.00');
+    $anchos = [
+        'A' => 8,
+        'B' => 18,
+        'C' => 18,
+        'D' => 28,
+        'E' => 24,
+        'F' => 16,
+        'G' => 16,
+        'H' => 16,
+        'I' => 20,
+        'J' => 20,
+        'K' => 20,
+        'L' => 16,
+        'M' => 14,
+        'N' => 20,
+    ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | DATOS
-    |--------------------------------------------------------------------------
-    */
-
-    foreach ($rows as $indiceFila => $row) {
-
-        $r++;
-
-        $cells = [];
-
-        $esTotal =
-            $indiceFila === count($rows) - 1;
-
-        foreach ($row as $indice => $cell) {
-
-            [$tipo, $valor] = $cell;
-
-            $referencia =
-                $col($indice + 1) . $r;
-
-            $estilo = $esTotal
-                ? 4
-                : ($tipo === 'n' ? 5 : 0);
-
-
-            if ($tipo === 'n') {
-
-                $cells[] =
-                    '<c r="' .
-                    $referencia .
-                    '" s="' .
-                    $estilo .
-                    '">' .
-
-                        '<v>' .
-                            ((float) $valor) .
-                        '</v>' .
-
-                    '</c>';
-
-            } else {
-
-                $cells[] =
-                    '<c r="' .
-                    $referencia .
-                    '" t="inlineStr" s="' .
-                    $estilo .
-                    '">' .
-
-                        '<is><t>' .
-                            $esc($valor) .
-                        '</t></is>' .
-
-                    '</c>';
-            }
-        }
-
-        $sheetRows[] =
-            '<row r="' . $r . '">' .
-                implode('', $cells) .
-            '</row>';
+    foreach ($anchos as $columna => $ancho) {
+        $sheet->getColumnDimension($columna)
+            ->setWidth($ancho);
     }
 
+    $sheet->freezePane('A6');
 
-    /*
-    |--------------------------------------------------------------------------
-    | HOJA
-    |--------------------------------------------------------------------------
-    */
+    $ultimaFilaDatos = max(5, $filaTotal - 1);
 
-    $sheet =
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-
-        '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-
-            '<sheetViews>' .
-
-                '<sheetView workbookViewId="0">' .
-
-                    '<pane ' .
-                        'ySplit="5" ' .
-                        'topLeftCell="A6" ' .
-                        'activePane="bottomLeft" ' .
-                        'state="frozen"/>' .
-
-                '</sheetView>' .
-
-            '</sheetViews>' .
-
-
-            '<cols>' .
-
-                '<col min="1" max="1" width="8" customWidth="1"/>' .
-
-                '<col min="2" max="3" width="18" customWidth="1"/>' .
-
-                '<col min="4" max="4" width="28" customWidth="1"/>' .
-
-                '<col min="5" max="5" width="24" customWidth="1"/>' .
-
-                '<col min="6" max="8" width="16" customWidth="1"/>' .
-
-                '<col min="9" max="11" width="20" customWidth="1"/>' .
-
-            '</cols>' .
-
-
-            '<sheetData>' .
-
-                implode(
-                    '',
-                    $sheetRows
-                ) .
-
-            '</sheetData>' .
-
-
-            '<autoFilter ref="A5:K' .
-                max(
-                    5,
-                    $r - 1
-                ) .
-            '"/>' .
-
-        '</worksheet>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | ESTILOS
-    |--------------------------------------------------------------------------
-    */
-
-    $styles =
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-
-        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-
-            '<fonts count="3">' .
-
-                '<font>' .
-                    '<sz val="11"/>' .
-                    '<name val="Calibri"/>' .
-                '</font>' .
-
-                '<font>' .
-                    '<b/>' .
-                    '<sz val="14"/>' .
-                    '<color rgb="FF173F32"/>' .
-                    '<name val="Calibri"/>' .
-                '</font>' .
-
-                '<font>' .
-                    '<b/>' .
-                    '<sz val="12"/>' .
-                    '<color rgb="FF198754"/>' .
-                    '<name val="Calibri"/>' .
-                '</font>' .
-
-            '</fonts>' .
-
-
-            '<fills count="3">' .
-
-                '<fill>' .
-                    '<patternFill patternType="none"/>' .
-                '</fill>' .
-
-                '<fill>' .
-                    '<patternFill patternType="gray125"/>' .
-                '</fill>' .
-
-                '<fill>' .
-                    '<patternFill patternType="solid">' .
-                        '<fgColor rgb="FFEAF4EF"/>' .
-                        '<bgColor indexed="64"/>' .
-                    '</patternFill>' .
-                '</fill>' .
-
-            '</fills>' .
-
-
-            '<borders count="2">' .
-
-                '<border/>' .
-
-                '<border>' .
-                    '<left style="thin"/>' .
-                    '<right style="thin"/>' .
-                    '<top style="thin"/>' .
-                    '<bottom style="thin"/>' .
-                '</border>' .
-
-            '</borders>' .
-
-
-            '<cellXfs count="6">' .
-
-                '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>' .
-
-                '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>' .
-
-                '<xf numFmtId="0" fontId="2" fillId="0" borderId="0"/>' .
-
-                '<xf numFmtId="0" fontId="0" fillId="2" borderId="1"
-                    applyFill="1" applyBorder="1"/>' .
-
-                '<xf numFmtId="0" fontId="1" fillId="2" borderId="1"
-                    applyFill="1" applyBorder="1"/>' .
-
-                '<xf numFmtId="4" fontId="0" fillId="0" borderId="1"
-                    applyNumberFormat="1" applyBorder="1"/>' .
-
-            '</cellXfs>' .
-
-        '</styleSheet>';
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | CREAR XLSX
-    |--------------------------------------------------------------------------
-    */
+    $sheet->setAutoFilter(
+        'A5:N' . $ultimaFilaDatos
+    );
+    $observaciones = trim((string) $request->input('observaciones', ''));
+    if ($observaciones !== '') {
+        $filaObservaciones = $filaTotal + 2;
+        $sheet->mergeCells('A' . $filaObservaciones . ':N' . $filaObservaciones);
+        $sheet->setCellValue('A' . $filaObservaciones, 'OBSERVACIONES: ' . $observaciones);
+        $sheet->getStyle('A' . $filaObservaciones)->getAlignment()->setWrapText(true);
+    }
+    $nombre =
+        'SIGECOM_Reporte_por_vehiculo_' .
+        now()->format('Ymd_His') .
+        '.xlsx';
 
     $tmp = tempnam(
         sys_get_temp_dir(),
         'sigecom_vehiculos_'
     );
 
-    $zip = new \ZipArchive();
-
-    $zip->open(
-        $tmp,
-        \ZipArchive::OVERWRITE
-    );
-
-
-    $zip->addFromString(
-        '[Content_Types].xml',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' .
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' .
-            '<Default Extension="xml" ContentType="application/xml"/>' .
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' .
-            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' .
-            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' .
-        '</Types>'
-    );
-
-
-    $zip->addFromString(
-        '_rels/.rels',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' .
-        '</Relationships>'
-    );
-
-
-    $zip->addFromString(
-        'xl/workbook.xml',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' .
-        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' .
-
-            '<sheets>' .
-                '<sheet name="Vehiculos" sheetId="1" r:id="rId1"/>' .
-            '</sheets>' .
-
-        '</workbook>'
-    );
-
-
-    $zip->addFromString(
-        'xl/_rels/workbook.xml.rels',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
-
-            '<Relationship Id="rId1" ' .
-                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" ' .
-                'Target="worksheets/sheet1.xml"/>' .
-
-            '<Relationship Id="rId2" ' .
-                'Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" ' .
-                'Target="styles.xml"/>' .
-
-        '</Relationships>'
-    );
-
-
-    $zip->addFromString(
-        'xl/worksheets/sheet1.xml',
-        $sheet
-    );
-
-    $zip->addFromString(
-        'xl/styles.xml',
-        $styles
-    );
-
-    $zip->close();
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | DESCARGAR
-    |--------------------------------------------------------------------------
-    */
-
-    $nombre =
-        'SIGECOM_Reporte_por_vehiculo_' .
-        now()->format('Ymd_His') .
-        '.xlsx';
-
+    $writer = new Xlsx($spreadsheet);
+    $writer->save($tmp);
 
     return response()
         ->download(
@@ -3503,7 +1828,7 @@ public function porApertura(Request $request)
             $nombre,
             [
                 'Content-Type' =>
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ]
         )
         ->deleteFileAfterSend(true);
@@ -3511,8 +1836,13 @@ public function porApertura(Request $request)
 
 public function vehiculosPdf(Request $request)
 {
-    $consulta = ValeCombustible::conConsumo()->with([
+    $request->validate([
+        'observaciones' => ['nullable', 'string', 'max:2000'],
+    ]);
+
+    $consulta = $this->consultaConsumo($request)->with([
         'vehiculo.unidad',
+        'tipoCombustible',
         'aperturaProgramatica.fuenteFinanciamiento',
         'aperturaProgramatica.organismoFinanciador',
     ]);
@@ -3524,33 +1854,13 @@ public function vehiculosPdf(Request $request)
         );
     }
 
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
-        );
-    }
-
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
+    $this->aplicarFiltrosFecha($consulta, $request);
 
     $vales = $consulta
         ->orderBy('vehiculo_id')
         ->orderBy('fecha')
         ->orderBy('numero_vale')
         ->get();
-
-    /*
-    |--------------------------------------------------------------------------
-    | PARTES DIARIOS
-    |--------------------------------------------------------------------------
-    */
 
     $vehiculoIds = $vales
         ->pluck('vehiculo_id')
@@ -3600,12 +1910,6 @@ public function vehiculosPdf(Request $request)
             });
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | PREPARAR REPORTE
-    |--------------------------------------------------------------------------
-    */
-
     $reporte = $vales
         ->map(function ($vale) use ($partesDiarios) {
 
@@ -3631,6 +1935,15 @@ public function vehiculosPdf(Request $request)
             }
 
             return (object) [
+                'fecha' =>
+                    $vale->fecha,
+
+                'numero_vale' =>
+                    $vale->numero_vale,
+
+                'combustible' =>
+                    $vale->tipoCombustible?->nombre ?? '-',
+
                 'codigo' =>
                     $vehiculo?->codigo ?? '-',
 
@@ -3668,20 +1981,9 @@ public function vehiculosPdf(Request $request)
         })
         ->values();
 
-    /*
-    |--------------------------------------------------------------------------
-    | TOTALES
-    |--------------------------------------------------------------------------
-    */
-
     $totalLitros = (float) $reporte->sum('litros');
     $totalMonto = (float) $reporte->sum('total');
-
-    /*
-    |--------------------------------------------------------------------------
-    | LOGOS
-    |--------------------------------------------------------------------------
-    */
+    $etiquetas = $this->etiquetasReporteVehiculos($request);
 
     $logoSacaba = null;
     $logoChapare = null;
@@ -3705,11 +2007,7 @@ public function vehiculosPdf(Request $request)
             );
     }
 
-    /*
-    |--------------------------------------------------------------------------
-    | GENERAR PDF
-    |--------------------------------------------------------------------------
-    */
+    $observaciones = trim((string) $request->input('observaciones', ''));
 
     $pdf = Pdf::loadView(
         'reportes.pdf.vehiculos',
@@ -3718,74 +2016,66 @@ public function vehiculosPdf(Request $request)
             'totalLitros',
             'totalMonto',
             'logoSacaba',
-            'logoChapare'
+            'logoChapare',
+            'observaciones',
+            'etiquetas'
         )
     );
 
     $pdf->setPaper('letter', 'landscape');
 
-    return $pdf->stream(
+    return $pdf->download(
         'Reporte_por_vehiculo_' .
-        now()->format('Ymd_His') .
+        now()->format('Y-m-d')  .
         '.pdf'
     );
 }
- public function aperturasExcel(Request $request)
+public function aperturasExcel(Request $request)
 {
-    $consulta = ValeCombustible::conConsumo()->with([
+    $consulta = $this->consultaConsumo($request)->with([
         'vehiculo.unidad',
         'aperturaProgramatica.fuenteFinanciamiento',
         'aperturaProgramatica.organismoFinanciador',
     ]);
 
-    // APERTURA PROGRAMÁTICA
-    if ($request->filled('apertura_programatica_id')) {
-        $consulta->where(
-            'apertura_programatica_id',
-            $request->apertura_programatica_id
+    $consulta
+        ->when(
+            $request->filled('apertura_programatica_id'),
+            fn ($q) => $q->where(
+                'apertura_programatica_id',
+                $request->apertura_programatica_id
+            )
+        )
+        ->when(
+            $request->filled('periodo_id'),
+            fn ($q) => $q->where(
+                'periodo_id',
+                $request->periodo_id
+            )
+        )
+        ->when(
+            $request->filled('fecha_inicio'),
+            fn ($q) => $q->whereDate(
+                'fecha',
+                '>=',
+                $request->fecha_inicio
+            )
+        )
+        ->when(
+            $request->filled('fecha_fin'),
+            fn ($q) => $q->whereDate(
+                'fecha',
+                '<=',
+                $request->fecha_fin
+            )
         );
-    }
-
-    // PERÍODO
-    if ($request->filled('periodo_id')) {
-        $consulta->where(
-            'periodo_id',
-            $request->periodo_id
-        );
-    }
-
-    // FECHA INICIAL
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
-        );
-    }
-
-    // FECHA FINAL
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
 
     $vales = $consulta
         ->orderBy('apertura_programatica_id')
         ->orderBy('fecha')
         ->get();
-
-    /*
-    |--------------------------------------------------------------------------
-    | AGRUPAR AP + FF + OF + UNIDAD + PRECIO UNITARIO
-    |--------------------------------------------------------------------------
-    */
-
     $reporte = $vales
         ->groupBy(function ($vale) {
-
             $apertura = $vale->aperturaProgramatica;
             $unidad = $vale->vehiculo?->unidad;
 
@@ -3798,9 +2088,7 @@ public function vehiculosPdf(Request $request)
             ]);
         })
         ->map(function ($grupo) {
-
             $primerVale = $grupo->first();
-
             $apertura = $primerVale->aperturaProgramatica;
             $unidad = $primerVale->vehiculo?->unidad;
 
@@ -3830,73 +2118,28 @@ public function vehiculosPdf(Request $request)
             ];
         })
         ->values();
+    $spreadsheet = new Spreadsheet();
+    $sheet = $spreadsheet->getActiveSheet();
 
-    /*
-    |--------------------------------------------------------------------------
-    | SI ZIPARCHIVE NO ESTÁ DISPONIBLE → CSV
-    |--------------------------------------------------------------------------
-    */
+    $sheet->setTitle('Aperturas');
+    $sheet->mergeCells('A1:G1');
+    $sheet->setCellValue(
+        'A1',
+        'SECRETARIA MUNICIPAL DE FINANZAS Y ADMINISTRACION - DIRECCION ADMINISTRATIVA'
+    );
 
-    if (!class_exists(\ZipArchive::class)) {
+    $sheet->mergeCells('A2:G2');
+    $sheet->setCellValue(
+        'A2',
+        'REPORTE ASIGNACIÓN DE COMBUSTIBLE POR APERTURA PROGRAMÁTICA'
+    );
 
-        $nombre = 'SIGECOM_Reporte_por_apertura_' .
-            now()->format('Ymd_His') . '.csv';
-
-        return response()->streamDownload(function () use ($reporte) {
-
-            $out = fopen('php://output', 'w');
-
-            // UTF-8 BOM para Excel
-            fwrite($out, "\xEF\xBB\xBF");
-
-            fputcsv($out, [
-                'APERTURA PROGRAMÁTICA',
-                'FF',
-                'OF',
-                'NOMBRE DE LA UNIDAD O PROYECTO',
-                'CANTIDAD GASOLINA LITROS',
-                'PRECIO UNITARIO (Bs./Litro)',
-                'PRECIO TOTAL (Bs.)',
-            ], ';');
-
-            foreach ($reporte as $fila) {
-
-                fputcsv($out, [
-                    $fila['apertura'],
-                    $fila['fuente'],
-                    $fila['organismo'],
-                    $fila['unidad'],
-                    number_format($fila['litros'], 2, ',', ''),
-                    number_format($fila['precio_unitario'], 2, ',', ''),
-                    number_format($fila['total'], 2, ',', ''),
-                ], ';');
-            }
-
-            // TOTAL
-            fputcsv($out, [
-                '',
-                '',
-                '',
-                'TOTAL',
-                number_format($reporte->sum('litros'), 2, ',', ''),
-                '',
-                number_format($reporte->sum('total'), 2, ',', ''),
-            ], ';');
-
-            fclose($out);
-
-        }, $nombre, [
-            'Content-Type' => 'text/csv; charset=UTF-8'
-        ]);
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | GENERAR XLSX
-    |--------------------------------------------------------------------------
-    */
-
-    $headers = [
+    $sheet->mergeCells('A3:G3');
+    $sheet->setCellValue(
+        'A3',
+        'DETALLE DE ASIGNACIÓN DE COMBUSTIBLE'
+    );
+    $encabezados = [
         'APERTURA PROGRAMÁTICA',
         'FF',
         'OF',
@@ -3906,353 +2149,145 @@ public function vehiculosPdf(Request $request)
         'PRECIO TOTAL (Bs.)',
     ];
 
-    $rows = [];
+    $sheet->fromArray(
+        $encabezados,
+        null,
+        'A5'
+    );
+    $fila = 6;
 
-    foreach ($reporte as $fila) {
+    foreach ($reporte as $dato) {
+        $sheet->fromArray([
+            $dato['apertura'],
+            $dato['fuente'],
+            $dato['organismo'],
+            $dato['unidad'],
+            $dato['litros'],
+            $dato['precio_unitario'],
+            $dato['total'],
+        ], null, 'A' . $fila);
 
-        $rows[] = [
-            ['s', (string) $fila['apertura']],
-            ['s', (string) $fila['fuente']],
-            ['s', (string) $fila['organismo']],
-            ['s', (string) $fila['unidad']],
-            ['n', round((float) $fila['litros'], 2)],
-            ['n', round((float) $fila['precio_unitario'], 2)],
-            ['n', round((float) $fila['total'], 2)],
-        ];
+        $fila++;
+    }
+    $filaTotal = $fila;
+
+    $sheet->setCellValue(
+        'D' . $filaTotal,
+        'TOTAL'
+    );
+
+    $sheet->setCellValue(
+        'E' . $filaTotal,
+        (float) $reporte->sum('litros')
+    );
+
+    $sheet->setCellValue(
+        'G' . $filaTotal,
+        (float) $reporte->sum('total')
+    );
+    $sheet->getStyle('A1:G1')
+        ->getFont()
+        ->setBold(true)
+        ->setSize(14);
+
+    $sheet->getStyle('A2:G3')
+        ->getFont()
+        ->setBold(true)
+        ->setSize(12);
+
+    $sheet->getStyle('A1:G3')
+        ->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+        ->setVertical(Alignment::VERTICAL_CENTER);
+    $sheet->getStyle('A5:G5')
+        ->getFont()
+        ->setBold(true);
+
+    $sheet->getStyle('A5:G5')
+        ->getAlignment()
+        ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+        ->setVertical(Alignment::VERTICAL_CENTER)
+        ->setWrapText(true);
+
+    $sheet->getStyle('A5:G5')
+        ->getFill()
+        ->setFillType(Fill::FILL_SOLID)
+        ->getStartColor()
+        ->setARGB('FFEAF4EF');
+    $sheet->getStyle(
+        'A5:G' . $filaTotal
+    )
+        ->getBorders()
+        ->getAllBorders()
+        ->setBorderStyle(Border::BORDER_THIN);
+    $sheet->getStyle(
+        'D' . $filaTotal . ':G' . $filaTotal
+    )
+        ->getFont()
+        ->setBold(true);
+
+    $sheet->getStyle(
+        'D' . $filaTotal . ':G' . $filaTotal
+    )
+        ->getFill()
+        ->setFillType(Fill::FILL_SOLID)
+        ->getStartColor()
+        ->setARGB('FFEAF4EF');
+    if ($filaTotal > 6) {
+        $sheet->getStyle(
+            'E6:G' . ($filaTotal - 1)
+        )
+            ->getNumberFormat()
+            ->setFormatCode('#,##0.00');
     }
 
-    // FILA TOTAL
-    $rows[] = [
-        ['s', ''],
-        ['s', ''],
-        ['s', ''],
-        ['s', 'TOTAL'],
-        ['n', round((float) $reporte->sum('litros'), 2)],
+    $sheet->getStyle(
+        'E' . $filaTotal
+    )
+        ->getNumberFormat()
+        ->setFormatCode('#,##0.00');
 
-        // Precio unitario NO se suma
-        ['s', ''],
-
-        ['n', round((float) $reporte->sum('total'), 2)],
+    $sheet->getStyle(
+        'G' . $filaTotal
+    )
+        ->getNumberFormat()
+        ->setFormatCode('#,##0.00');
+    $anchos = [
+        'A' => 28,
+        'B' => 12,
+        'C' => 12,
+        'D' => 45,
+        'E' => 22,
+        'F' => 25,
+        'G' => 22,
     ];
 
-    /*
-    |--------------------------------------------------------------------------
-    | FUNCIONES AUXILIARES
-    |--------------------------------------------------------------------------
-    */
-
-    $esc = static fn($v) =>
-        htmlspecialchars(
-            (string) $v,
-            ENT_XML1 | ENT_QUOTES,
-            'UTF-8'
-        );
-
-    $col = static function (int $n): string {
-
-        $r = '';
-
-        while ($n > 0) {
-            $n--;
-            $r = chr(65 + ($n % 26)) . $r;
-            $n = intdiv($n, 26);
-        }
-
-        return $r;
-    };
-
-    /*
-    |--------------------------------------------------------------------------
-    | CONTENIDO DEL EXCEL
-    |--------------------------------------------------------------------------
-    */
-
-    $sheetRows = [];
-
-    // Título institucional
-    $sheetRows[] =
-        '<row r="1">' .
-            '<c r="A1" t="inlineStr" s="1">' .
-                '<is><t>SECRETARIA MUNICIPAL DE FINANZAS Y ADMINISTRACION - DIRECCION ADMINISTRATIVA</t></is>' .
-            '</c>' .
-        '</row>';
-
-    // Título reporte
-    $sheetRows[] =
-        '<row r="2">' .
-            '<c r="A2" t="inlineStr" s="2">' .
-                '<is><t>REPORTE ASIGNACIÓN DE COMBUSTIBLE POR APERTURA PROGRAMÁTICA</t></is>' .
-            '</c>' .
-        '</row>';
-
-    // Subtítulo
-    $sheetRows[] =
-        '<row r="3">' .
-            '<c r="A3" t="inlineStr" s="2">' .
-                '<is><t>DETALLE DE ASIGNACIÓN DE COMBUSTIBLE</t></is>' .
-            '</c>' .
-        '</row>';
-
-    /*
-    |--------------------------------------------------------------------------
-    | ENCABEZADOS DE TABLA
-    |--------------------------------------------------------------------------
-    */
-
-    $r = 5;
-
-    $cells = [];
-
-    foreach ($headers as $i => $h) {
-
-        $ref = $col($i + 1) . $r;
-
-        $cells[] =
-            '<c r="' . $ref . '" t="inlineStr" s="3">' .
-                '<is><t>' . $esc($h) . '</t></is>' .
-            '</c>';
+    foreach ($anchos as $columna => $ancho) {
+        $sheet->getColumnDimension($columna)
+            ->setWidth($ancho);
     }
+    $sheet->freezePane('A6');
 
-    $sheetRows[] =
-        '<row r="' . $r . '">' .
-            implode('', $cells) .
-        '</row>';
+    $ultimaFilaDatos = max(
+        5,
+        $filaTotal - 1
+    );
 
-    /*
-    |--------------------------------------------------------------------------
-    | FILAS
-    |--------------------------------------------------------------------------
-    */
-
-    foreach ($rows as $ri => $row) {
-
-        $r++;
-
-        $cells = [];
-
-        $isTotal = $ri === count($rows) - 1;
-
-        foreach ($row as $i => $cell) {
-
-            [$type, $value] = $cell;
-
-            $ref = $col($i + 1) . $r;
-
-            $style = $isTotal
-                ? 4
-                : ($type === 'n' ? 5 : 0);
-
-            if ($type === 'n') {
-
-                $cells[] =
-                    '<c r="' . $ref . '" s="' . $style . '">' .
-                        '<v>' . ((float) $value) . '</v>' .
-                    '</c>';
-
-            } else {
-
-                $cells[] =
-                    '<c r="' . $ref . '" t="inlineStr" s="' . $style . '">' .
-                        '<is><t>' . $esc($value) . '</t></is>' .
-                    '</c>';
-            }
-        }
-
-        $sheetRows[] =
-            '<row r="' . $r . '">' .
-                implode('', $cells) .
-            '</row>';
-    }
-
-    /*
-    |--------------------------------------------------------------------------
-    | HOJA
-    |--------------------------------------------------------------------------
-    */
-
-    $sheet =
-    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-    '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-
-    '<sheetViews>' .
-        '<sheetView workbookViewId="0">' .
-            '<pane ySplit="5" topLeftCell="A6" activePane="bottomLeft" state="frozen"/>' .
-        '</sheetView>' .
-    '</sheetViews>' .
-
-    '<cols>' .
-        '<col min="1" max="1" width="28" customWidth="1"/>' .
-        '<col min="2" max="3" width="12" customWidth="1"/>' .
-        '<col min="4" max="4" width="45" customWidth="1"/>' .
-        '<col min="5" max="5" width="22" customWidth="1"/>' .
-        '<col min="6" max="6" width="25" customWidth="1"/>' .
-        '<col min="7" max="7" width="22" customWidth="1"/>' .
-    '</cols>' .
-
-    '<sheetData>' .
-        implode('', $sheetRows) .
-    '</sheetData>' .
-
-    '<autoFilter ref="A5:G' . max(5, $r - 1) . '"/>' .
-
-    '</worksheet>';
-
-    /*
-    |--------------------------------------------------------------------------
-    | ESTILOS
-    |--------------------------------------------------------------------------
-    */
-
-    $styles =
-        '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' .
-
-        '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' .
-
-        '<fonts count="3">' .
-
-            '<font>' .
-                '<sz val="11"/>' .
-                '<name val="Calibri"/>' .
-            '</font>' .
-
-            '<font>' .
-                '<b/>' .
-                '<sz val="14"/>' .
-                '<color rgb="FF173F32"/>' .
-                '<name val="Calibri"/>' .
-            '</font>' .
-
-            '<font>' .
-                '<b/>' .
-                '<sz val="12"/>' .
-                '<color rgb="FF198754"/>' .
-                '<name val="Calibri"/>' .
-            '</font>' .
-
-        '</fonts>' .
-
-        '<fills count="3">' .
-            '<fill><patternFill patternType="none"/></fill>' .
-            '<fill><patternFill patternType="gray125"/></fill>' .
-            '<fill>' .
-                '<patternFill patternType="solid">' .
-                    '<fgColor rgb="FFEAF4EF"/>' .
-                    '<bgColor indexed="64"/>' .
-                '</patternFill>' .
-            '</fill>' .
-        '</fills>' .
-
-        '<borders count="2">' .
-            '<border/>' .
-            '<border>' .
-                '<left style="thin"/>' .
-                '<right style="thin"/>' .
-                '<top style="thin"/>' .
-                '<bottom style="thin"/>' .
-            '</border>' .
-        '</borders>' .
-
-        '<cellXfs count="6">' .
-
-            '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>' .
-
-            '<xf numFmtId="0" fontId="1" fillId="0" borderId="0"/>' .
-
-            '<xf numFmtId="0" fontId="2" fillId="0" borderId="0"/>' .
-
-            '<xf numFmtId="0" fontId="0" fillId="2" borderId="1"
-                applyFill="1" applyBorder="1"/>' .
-
-            '<xf numFmtId="0" fontId="1" fillId="2" borderId="1"
-                applyFill="1" applyBorder="1"/>' .
-
-            '<xf numFmtId="4" fontId="0" fillId="0" borderId="1"
-                applyNumberFormat="1" applyBorder="1"/>' .
-
-        '</cellXfs>' .
-
-        '</styleSheet>';
-
-    /*
-    |--------------------------------------------------------------------------
-    | CREAR ARCHIVO XLSX
-    |--------------------------------------------------------------------------
-    */
+    $sheet->setAutoFilter(
+        'A5:G' . $ultimaFilaDatos
+    );
+    $nombre =
+        'SIGECOM_Reporte_por_apertura_' .
+        now()->format('Ymd_His') .
+        '.xlsx';
 
     $tmp = tempnam(
         sys_get_temp_dir(),
         'sigecom_aperturas_'
     );
 
-    $zip = new \ZipArchive();
-
-    $zip->open(
-        $tmp,
-        \ZipArchive::OVERWRITE
-    );
-
-    $zip->addFromString(
-        '[Content_Types].xml',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' .
-            '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>' .
-            '<Default Extension="xml" ContentType="application/xml"/>' .
-            '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>' .
-            '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>' .
-            '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>' .
-        '</Types>'
-    );
-
-    $zip->addFromString(
-        '_rels/.rels',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>' .
-        '</Relationships>'
-    );
-
-    $zip->addFromString(
-        'xl/workbook.xml',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" ' .
-        'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">' .
-            '<sheets>' .
-                '<sheet name="Aperturas" sheetId="1" r:id="rId1"/>' .
-            '</sheets>' .
-        '</workbook>'
-    );
-
-    $zip->addFromString(
-        'xl/_rels/workbook.xml.rels',
-        '<?xml version="1.0" encoding="UTF-8"?>' .
-        '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' .
-            '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>' .
-            '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' .
-        '</Relationships>'
-    );
-
-    $zip->addFromString(
-        'xl/worksheets/sheet1.xml',
-        $sheet
-    );
-
-    $zip->addFromString(
-        'xl/styles.xml',
-        $styles
-    );
-
-    $zip->close();
-
-    /*
-    |--------------------------------------------------------------------------
-    | DESCARGAR
-    |--------------------------------------------------------------------------
-    */
-
-    $nombre =
-        'SIGECOM_Reporte_por_apertura_' .
-        now()->format('Ymd_His') .
-        '.xlsx';
+    $writer = new Xlsx($spreadsheet);
+    $writer->save($tmp);
 
     return response()
         ->download(
@@ -4260,14 +2295,14 @@ public function vehiculosPdf(Request $request)
             $nombre,
             [
                 'Content-Type' =>
-                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             ]
         )
         ->deleteFileAfterSend(true);
 }
     public function aperturasPdf(Request $request)
 {
-    $consulta = ValeCombustible::conConsumo()->with([
+    $consulta = $this->consultaConsumo($request)->with([
         'vehiculo.unidad',
         'tipoCombustible',
         'periodo',
@@ -4275,46 +2310,25 @@ public function vehiculosPdf(Request $request)
         'aperturaProgramatica.organismoFinanciador',
         'estacionServicio',
     ]);
-
-    // Apertura programática
     if ($request->filled('apertura_programatica_id')) {
         $consulta->where(
             'apertura_programatica_id',
             $request->apertura_programatica_id
         );
     }
-
-
-    // Fecha inicial
-    if ($request->filled('fecha_inicio')) {
-        $consulta->whereDate(
-            'fecha',
-            '>=',
-            $request->fecha_inicio
+    if ($request->filled('periodo_id')) {
+        $consulta->where(
+            'periodo_id',
+            $request->periodo_id
         );
     }
 
-    // Fecha final
-    if ($request->filled('fecha_fin')) {
-        $consulta->whereDate(
-            'fecha',
-            '<=',
-            $request->fecha_fin
-        );
-    }
+    $this->aplicarFiltrosFecha($consulta, $request);
 
     $vales = $consulta
         ->orderBy('apertura_programatica_id')
         ->orderBy('fecha')
         ->get();
-
-    /*
-    |--------------------------------------------------------------------------
-    | AGRUPACIÓN
-    |--------------------------------------------------------------------------
-    | Se agrupa también por precio_unitario porque el precio puede cambiar.
-    | El precio NO se suma.
-    */
 
     $reporte = $vales
         ->groupBy(function ($vale) {
@@ -4351,16 +2365,10 @@ public function vehiculosPdf(Request $request)
                     $unidad?->nombre
                     ?? $apertura?->descripcion
                     ?? '-',
-
-                // Litros sí se suman
                 'litros' =>
                     (float) $grupo->sum('cantidad_litros'),
-
-                // Precio unitario NO se suma
                 'precio_unitario' =>
                     (float) $primerVale->precio_unitario,
-
-                // Total sí se suma
                 'total' =>
                     (float) $grupo->sum('total'),
             ];
@@ -4369,8 +2377,6 @@ public function vehiculosPdf(Request $request)
 
     $totalLitros = (float) $reporte->sum('litros');
     $totalMonto = (float) $reporte->sum('total');
-
-    // Textos escritos por el usuario
     $textoInforme = trim((string) $request->input('texto_informe', ''));
     $notaReporte = trim((string) $request->input('nota_reporte', ''));
     $cierreReporte = trim((string) $request->input('cierre_reporte', 'Atentamente.'));
@@ -4396,12 +2402,27 @@ $logoChapare = file_exists($logoChaparePath)
     'logoSacaba',
     'logoChapare'
 ));
-    // Carta horizontal
     $pdf->setPaper('letter', 'landscape');
 
     return $pdf->download(
         'reporte_aperturas_' . now()->format('Y-m-d') . '.pdf'
     );
 }
+
+
+    private function descargarExcel(Spreadsheet $spreadsheet, string $nombre, string $prefijo)
+    {
+        $rutaTemporal = tempnam(sys_get_temp_dir(), $prefijo);
+        $writer = new Xlsx($spreadsheet);
+        $writer->save($rutaTemporal);
+        $spreadsheet->disconnectWorksheets();
+        unset($spreadsheet);
+
+        return response()
+            ->download($rutaTemporal, $nombre, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            ])
+            ->deleteFileAfterSend(true);
+    }
 
 }

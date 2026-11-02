@@ -7,6 +7,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement("
             ALTER TABLE vales_combustible
             ALTER COLUMN kilometraje TYPE VARCHAR(50)
@@ -16,6 +20,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            return;
+        }
+
         DB::statement("
             ALTER TABLE vales_combustible
             ALTER COLUMN kilometraje TYPE BIGINT

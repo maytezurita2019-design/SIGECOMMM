@@ -295,6 +295,17 @@
            BOTONES VERDES
         ===================================================== */
 
+        .btn:not(.btn-close) {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: .375rem;
+        }
+
+        .btn:not(.btn-close) > .bi {
+            line-height: 1;
+        }
+
         .btn-success {
             background-color: var(--sig-verde);
             border-color: var(--sig-verde);
@@ -369,9 +380,12 @@
 
     </style>
 
-
     {{-- CSS PARTICULAR DE CADA VISTA --}}
     @stack('styles')
+
+    <link
+        href="{{ asset('css/sigecom-tipografia.css') }}"
+        rel="stylesheet">
 
 @endsection
 
@@ -447,6 +461,9 @@
                             return;
                         }
 
+                        if (form.dataset.skipSubmitProcessing === 'true') {
+                            return;
+                        }
 
                         form
                             .querySelectorAll('button[type="submit"]')

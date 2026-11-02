@@ -137,6 +137,20 @@
         </select>
     </div>
 
+    {{-- DETALLE DE ASIGNACIÓN --}}
+    <div class="col-12 mb-3">
+        <label for="detalle_asignacion_predeterminado" class="form-label">
+            Detalle de asignación
+        </label>
+
+        <textarea
+            name="detalle_asignacion_predeterminado"
+            id="detalle_asignacion_predeterminado"
+            class="form-control"
+            rows="3"
+        >{{ old('detalle_asignacion_predeterminado', $vehiculo->detalle_asignacion_predeterminado) }}</textarea>
+    </div>
+
     {{-- APERTURA PROGRAMÁTICA --}}
     <div class="col-md-6 mb-3">
 
@@ -234,6 +248,7 @@
     type="submit"
     class="btn btn-primary"
 >
+    <i class="bi bi-save me-1" aria-hidden="true"></i>
     Actualizar
 </button>
 
@@ -241,6 +256,7 @@
     href="{{ route('vehiculos.index') }}"
     class="btn btn-secondary"
 >
+    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
     Cancelar
 </a>
 

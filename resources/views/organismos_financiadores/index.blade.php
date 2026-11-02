@@ -99,6 +99,50 @@
 
     <div class="card-body">
 
+        <form method="GET" action="{{ route('organismos-financiadores.index') }}" class="mb-3">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-8 col-lg-6">
+                    <label for="buscar" class="form-label">Buscar organismo</label>
+                    <div class="input-group">
+                        <span class="input-group-text bg-white text-success">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input
+                            type="search"
+                            name="buscar"
+                            id="buscar"
+                            class="form-control @error('buscar') is-invalid @enderror"
+                            value="{{ request('buscar') }}"
+                            placeholder="Código o nombre"
+                        >
+                        @error('buscar')
+                            <div class="invalid-feedback">{{ $message }}</div>
+                        @enderror
+                    </div>
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label for="estado" class="form-label">Estado</label>
+                    <select name="estado" id="estado" class="form-select @error('estado') is-invalid @enderror">
+                        <option value="">Todos</option>
+                        <option value="activo" @selected(request('estado') === 'activo')>Activos</option>
+                        <option value="inactivo" @selected(request('estado') === 'inactivo')>Inactivos</option>
+                    </select>
+                    @error('estado')
+                        <div class="invalid-feedback">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-12 col-md-12 col-lg-3 d-flex flex-wrap gap-2">
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-search me-1" aria-hidden="true"></i>Buscar
+                    </button>
+                    <a href="{{ route('organismos-financiadores.index') }}" class="btn btn-outline-success">
+                        <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
+                        Limpiar filtros
+                    </a>
+                </div>
+            </div>
+        </form>
+
         <div class="table-responsive">
 
             <table class="table table-bordered table-hover align-middle tabla-organismos">
@@ -150,7 +194,8 @@
 
                                 <a href="{{ route('organismos-financiadores.show', $organismoFinanciador) }}"
                                    class="btn btn-sm btn-info text-white"
-                                   title="Ver">
+                                   title="Ver"
+                                   aria-label="Ver organismo financiador">
 
                                     <i class="bi bi-eye"></i>
 
@@ -158,7 +203,8 @@
 
                                 <a href="{{ route('organismos-financiadores.edit', $organismoFinanciador) }}"
                                    class="btn btn-sm btn-warning"
-                                   title="Editar">
+                                   title="Editar"
+                                   aria-label="Editar organismo financiador">
 
                                     <i class="bi bi-pencil"></i>
 
@@ -177,7 +223,7 @@
 
                                 <i class="bi bi-inbox fs-3 d-block mb-2"></i>
 
-                                No existen organismos financiadores registrados.
+                                No se encontraron registros.
 
                             </td>
 

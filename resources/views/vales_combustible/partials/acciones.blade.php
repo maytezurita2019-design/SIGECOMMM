@@ -1,164 +1,97 @@
+
 @php
-    $rolActual = mb_strtoupper(auth()->user()->rol->nombre ?? '');
+    $rolActual = mb_strtoupper(trim(auth()->user()->rol->nombre ?? ''));
 
-    $puedeOperar =
-        str_contains($rolActual, 'ADMIN') ||
-        str_contains($rolActual, 'AUX');
+    $puedeOperar = in_array(
+        $rolActual,
+        ['TECNICO_I', 'TECNICO_II'],
+        true
+    );
 
-    $puedeEliminar =
-        str_contains($rolActual, 'ADMIN') ||
-        str_contains($rolActual, 'AUX');
+    $puedeConsultar = in_array(
+        $rolActual,
+        ['ADMINISTRADOR', 'TECNICO_I', 'TECNICO_II'],
+        true
+    );
+
+    $esGams = !$vale->entrega_policia_id;
+    $esPolicia = (bool) $vale->entrega_policia_id;
 @endphp
-
 
 <div class="acciones-vale">
 
     {{-- VER --}}
-    <a href="{{ route('vales-combustible.show', $vale) }}"
-       class="btn btn-sm btn-sig-outline">
+    @if($puedeConsultar)
+        <a href="{{ route('vales-combustible.show', $vale) }}"
+           class="btn btn-sm btn-sig-outline">
+            <i class="bi bi-eye me-1"></i>
+            Ver
+        </a>
+    @endif
 
-        <i class="bi bi-eye me-1"></i>
-        Ver
-
-    </a>
-
-
-    {{-- ===================================================== --}}
-    {{-- VALE GAMS PENDIENTE --}}
-    {{-- ===================================================== --}}
+    {{-- IMPRIMIR: disponible para los tres roles --}}
     @if(
-        $puedeOperar &&
-        !$vale->entrega_policia_id &&
-        $vale->estado === 'EMITIDO'
+        $puedeConsultar &&
+        $esGams &&
+        in_array($vale->estado, ['EMITIDO', 'COMPLETADO'], true)
     )
-
-        {{-- EDITAR --}}
-        <a href="{{ route('vales-combustible.edit', $vale) }}"
-           class="btn btn-sm btn-outline-primary"
-           title="Editar vale">
-
-            <i class="bi bi-pencil-square me-1"></i>
-            Editar
-
-        </a>
-
-
-        {{-- COMPLETAR --}}
-        <a href="{{ route('vales-combustible.completar.formulario', $vale) }}"
-           class="btn btn-sm btn-sig">
-
-            <i class="bi bi-check2-circle me-1"></i>
-            Completar
-
-        </a>
-
-
-        {{-- IMPRIMIR --}}
         <a href="{{ route('vales-combustible.imprimir', $vale) }}"
            target="_blank"
            class="btn btn-sm btn-sig-outline">
-
             <i class="bi bi-printer me-1"></i>
             Imprimir
-
         </a>
+    @endif
 
+    {{-- ACCIONES EXCLUSIVAS DE LOS TÉCNICOS --}}
+    @if($puedeOperar)
 
-        {{-- ELIMINAR --}}
-        @if($puedeEliminar)
+        {{-- VALE GAMS EMITIDO --}}
+        @if($esGams && $vale->estado === 'EMITIDO')
 
-            <form
-                action="{{ route('vales-combustible.destroy', $vale) }}"
-                method="POST"
-                class="d-inline"
-                onsubmit="return confirm('¿Está seguro de eliminar este vale? Utilice esta opción únicamente cuando el conductor haya informado que ya no realizará la carga de combustible. El número del vale no volverá a utilizarse.');"
-            >
+            <a href="{{ route('vales-combustible.edit', $vale) }}"
+               class="btn btn-sm btn-outline-primary"
+               title="Editar vale">
+                <i class="bi bi-pencil-square me-1"></i>
+                Editar
+            </a>
 
-                @csrf
-                @method('DELETE')
+            <a href="{{ route('vales-combustible.completar.formulario', $vale) }}"
+               class="btn btn-sm btn-sig">
+                <i class="bi bi-check2-circle me-1"></i>
+                Completar
+            </a>
 
-                <button
-                    type="submit"
-                    class="btn btn-sm btn-outline-danger"
-                    title="Eliminar vale"
-                >
+        {{-- VALE GAMS COMPLETADO --}}
+        @elseif($esGams && $vale->estado === 'COMPLETADO')
 
-                    <i class="bi bi-trash me-1"></i>
-                    Eliminar
+            <a href="{{ route('vales-combustible.edit', $vale) }}"
+               class="btn btn-sm btn-outline-primary"
+               title="Corregir datos del vale">
+                <i class="bi bi-pencil-square me-1"></i>
+                Editar
+            </a>
 
-                </button>
+        {{-- VALE POLICÍA ENTREGADO --}}
+        @elseif($esPolicia && $vale->estado === 'ENTREGADO')
 
-            </form>
+            <a href="{{ route('vales-combustible.edit', $vale) }}"
+               class="btn btn-sm btn-success">
+                <i class="bi bi-pencil-square me-1"></i>
+                Registrar uso
+            </a>
+
+        {{-- VALE POLICÍA UTILIZADO --}}
+        @elseif($esPolicia && $vale->estado === 'UTILIZADO')
+
+            <a href="{{ route('vales-combustible.edit', $vale) }}"
+               class="btn btn-sm btn-outline-primary"
+               title="Corregir datos registrados">
+                <i class="bi bi-pencil-square me-1"></i>
+                Editar
+            </a>
 
         @endif
-
-
-    {{-- ===================================================== --}}
-    {{-- VALE GAMS COMPLETADO --}}
-    {{-- ===================================================== --}}
-    @elseif(
-        $puedeOperar &&
-        !$vale->entrega_policia_id &&
-        $vale->estado === 'COMPLETADO'
-    )
-
-        {{-- EDITAR --}}
-        <a href="{{ route('vales-combustible.edit', $vale) }}"
-           class="btn btn-sm btn-outline-primary"
-           title="Corregir datos del vale">
-
-            <i class="bi bi-pencil-square me-1"></i>
-            Editar
-
-        </a>
-
-
-        {{-- IMPRIMIR --}}
-        <a href="{{ route('vales-combustible.imprimir', $vale) }}"
-           target="_blank"
-           class="btn btn-sm btn-sig-outline">
-
-            <i class="bi bi-printer me-1"></i>
-            Imprimir
-
-        </a>
-
-
-    {{-- ===================================================== --}}
-    {{-- VALE POLICÍA ENTREGADO --}}
-    {{-- ===================================================== --}}
-    @elseif(
-        $puedeOperar &&
-        $vale->entrega_policia_id &&
-        $vale->estado === 'ENTREGADO'
-    )
-
-        <a href="{{ route('vales-combustible.edit', $vale) }}"
-           class="btn btn-sm btn-success">
-
-            <i class="bi bi-pencil-square me-1"></i>
-            Registrar uso
-
-        </a>
-
-
-    {{-- ===================================================== --}}
-    {{-- VALE POLICÍA UTILIZADO --}}
-    {{-- ===================================================== --}}
-    @elseif(
-        $puedeOperar &&
-        $vale->entrega_policia_id &&
-        $vale->estado === 'UTILIZADO'
-    )
-
-        <a href="{{ route('vales-combustible.edit', $vale) }}"
-           class="btn btn-sm btn-outline-primary"
-           title="Corregir datos registrados">
-
-            <i class="bi bi-pencil-square me-1"></i>
-            Editar
-
-        </a>
 
     @endif
 

@@ -9,6 +9,27 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            Schema::table('lotes_vales', function (Blueprint $table) {
+                $table->unsignedBigInteger('serie_vale_id')->nullable()->after('id');
+            });
+
+            $serieActiva = DB::table('series_vales')
+                ->where('estado', true)
+                ->orderByDesc('id')
+                ->first();
+
+            if ($serieActiva) {
+                DB::table('lotes_vales')
+                    ->whereNull('serie_vale_id')
+                    ->update([
+                        'serie_vale_id' => $serieActiva->id,
+                    ]);
+            }
+
+            return;
+        }
+
         /*
         |--------------------------------------------------------------------------
         | AGREGAR SERIE A LOS LOTES

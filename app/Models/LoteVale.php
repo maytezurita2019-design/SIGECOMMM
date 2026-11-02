@@ -12,17 +12,33 @@ class LoteVale extends Model
 
     protected $fillable = [
         'serie_vale_id',
+        'serie_correlativa_id',
         'numero_inicial',
         'numero_final',
         'fecha_recepcion',
         'periodo_id',
         'estado',
+        'usuario_id',
     ];
 
     protected $casts = [
         'fecha_recepcion' => 'date',
         'estado' => 'boolean',
     ];
+
+    /*
+    |--------------------------------------------------------------------------
+    | USUARIO QUE CREÓ EL LOTE
+    |--------------------------------------------------------------------------
+    */
+
+    public function usuario(): BelongsTo
+    {
+        return $this->belongsTo(
+            Usuario::class,
+            'usuario_id'
+        );
+    }
 
     /*
     |--------------------------------------------------------------------------
@@ -52,6 +68,14 @@ class LoteVale extends Model
         );
     }
 
+    public function serieCorrelativa(): BelongsTo
+    {
+        return $this->belongsTo(
+            SerieCorrelativa::class,
+            'serie_correlativa_id'
+        );
+    }
+
     /*
     |--------------------------------------------------------------------------
     | VALES DEL LOTE
@@ -74,7 +98,11 @@ class LoteVale extends Model
 
     public function getSiguienteNumeroAttribute(): ?int
     {
-        $ultimoNumero = (int) $this->serie->ultimo_numero;
+        $ultimoNumero = (int) (
+            $this->serieCorrelativa?->ultimo_numero
+            ?? $this->serie?->ultimo_numero
+            ?? 0
+        );
 
         $siguiente = $ultimoNumero + 1;
 
@@ -92,8 +120,11 @@ class LoteVale extends Model
 
     public function getDisponiblesAttribute(): int
     {
-        $siguiente =
-            ((int) $this->serie->ultimo_numero) + 1;
+        $siguiente = ((int) (
+            $this->serieCorrelativa?->ultimo_numero
+            ?? $this->serie?->ultimo_numero
+            ?? 0
+        )) + 1;
 
         return max(
             0,

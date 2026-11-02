@@ -571,8 +571,9 @@
                                 data-bs-toggle="modal"
                                 data-bs-target="#{{ $modalId }}"
                                 title="Ver detalle"
+                                aria-label="Ver detalle de auditoría"
                             >
-                                <i class="bi bi-eye"></i>
+                                <i class="bi bi-eye" aria-hidden="true"></i>
                             </button>
 
                         </td>

@@ -12,7 +12,7 @@
         </div>
 
         <h1 class="page-title h2 mb-1">
-            Editar vale N.º {{ sprintf('%06d', $valeCombustible->numero_vale) }}
+            Editar vale N.º {{ $valeCombustible->numero_vale_formateado }}
         </h1>
 
         <p class="page-subtitle mb-0">
@@ -39,12 +39,19 @@
     </div>
 @endif
 
+@php
+    $nombreTipoVale = mb_strtoupper((string) ($valeCombustible->tipoCombustible?->nombre ?? ''), 'UTF-8');
+    $esValeDiesel = str_contains($nombreTipoVale, 'DIESEL') || str_contains($nombreTipoVale, 'DIÉSEL');
+@endphp
 
 <form action="{{ route('vales-combustible.update', $valeCombustible) }}"
       method="POST">
 
     @csrf
     @method('PUT')
+    @if($valeCombustible->tipo_combustible_id)
+        <input type="hidden" name="tipo_combustible_id" value="{{ $valeCombustible->tipo_combustible_id }}">
+    @endif
 
     <div class="row g-3">
 
@@ -68,7 +75,7 @@
 
                         <input type="text"
                                class="form-control"
-                               value="{{ sprintf('%06d', $valeCombustible->numero_vale) }}"
+                               value="{{ $valeCombustible->numero_vale_formateado }}"
                                disabled>
 
                         <div class="form-text">
@@ -216,7 +223,7 @@
                     <div class="row g-3">
 
                         {{-- FECHA --}}
-                        <div class="col-md-6">
+                        <div class="col-md-6 {{ $esValeDiesel ? 'd-none' : '' }}" id="estacionServicioContainer">
 
                             <label for="fecha"
                                    class="form-label">
@@ -240,6 +247,40 @@
                                 </div>
                             @enderror
 
+                        </div>
+
+                        <div class="col-md-6" id="estacionServicioContainer">
+                            <label for="estacion_servicio_id" class="form-label">Estación de servicio</label>
+                            <select name="estacion_servicio_id" id="estacion_servicio_id"
+                                    class="form-select @error('estacion_servicio_id') is-invalid @enderror">
+                                <option value="">Seleccione estación...</option>
+                                @foreach($estacionesServicio as $estacion)
+                                    <option value="{{ $estacion->id }}"
+                                        @disabled(!$estacion->estado)
+                                        @selected(old('estacion_servicio_id', $valeCombustible->estacion_servicio_id) == $estacion->id)>
+                                        {{ $estacion->nombre }}{{ $estacion->estado ? '' : ' (Inactiva)' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('estacion_servicio_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+
+                        <div class="col-md-6 {{ $esValeDiesel ? '' : 'd-none' }}" id="lugarEntregaContainer">
+                            <label for="lugar_entrega_id" class="form-label">Lugar de entrega</label>
+                            <select name="lugar_entrega_id" id="lugar_entrega_id"
+                                    class="form-select @error('lugar_entrega_id') is-invalid @enderror"
+                                    @disabled(!$esValeDiesel)>
+                                <option value="">Seleccione lugar de entrega...</option>
+                                @foreach($lugaresEntrega as $lugar)
+                                    <option value="{{ $lugar->id }}"
+                                        @disabled(!$lugar->estado)
+                                        @selected(old('lugar_entrega_id', $valeCombustible->lugar_entrega_id) == $lugar->id)>
+                                        {{ $lugar->nombre }}{{ $lugar->estado ? '' : ' (Inactivo)' }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <div class="form-text">Los vales históricos pueden conservar este dato vacío.</div>
+                            @error('lugar_entrega_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
                         </div>
 
 
@@ -286,95 +327,26 @@
     </div>
 
 
-    {{-- COMBUSTIBLE --}}
+    {{-- TIPO INMUTABLE: cambiarlo podría contradecir la serie del vale. --}}
     <div class="col-md-6">
-
-        <label for="tipo_combustible_id"
-               class="form-label">
-            Tipo de combustible *
-        </label>
-
-        <select
-            name="tipo_combustible_id"
-            id="tipo_combustible_id"
-            class="form-select @error('tipo_combustible_id') is-invalid @enderror"
-            required
-        >
-
-            <option value="">
-                Seleccione combustible...
-            </option>
-
-            @foreach($tiposCombustible as $tipo)
-
-                <option
-                    value="{{ $tipo->id }}"
-                    @selected(
-                        old(
-                            'tipo_combustible_id',
-                            $valeCombustible->tipo_combustible_id
-                        ) == $tipo->id
-                    )
-                >
-                    {{ $tipo->nombre }}
-                </option>
-
-            @endforeach
-
-        </select>
-
-        @error('tipo_combustible_id')
-            <div class="invalid-feedback">
-                {{ $message }}
-            </div>
-        @enderror
-
-    </div>
-
-
-    {{-- ESTACIÓN --}}
-    <div class="col-md-6">
-
-        <label for="estacion_servicio_id"
-               class="form-label">
-            Estación de servicio *
-        </label>
-
-        <select
-            name="estacion_servicio_id"
-            id="estacion_servicio_id"
-            class="form-select @error('estacion_servicio_id') is-invalid @enderror"
-            required
-        >
-
-            <option value="">
-                Seleccione estación...
-            </option>
-
-            @foreach($estacionesServicio as $estacion)
-
-                <option
-                    value="{{ $estacion->id }}"
-                    @selected(
-                        old(
-                            'estacion_servicio_id',
-                            $valeCombustible->estacion_servicio_id
-                        ) == $estacion->id
-                    )
-                >
-                    {{ $estacion->nombre }}
-                </option>
-
-            @endforeach
-
-        </select>
-
-        @error('estacion_servicio_id')
-            <div class="invalid-feedback">
-                {{ $message }}
-            </div>
-        @enderror
-
+        <label class="form-label">Tipo de combustible</label>
+        @if($valeCombustible->tipo_combustible_id)
+            <div class="form-control bg-light">{{ $valeCombustible->tipoCombustible?->nombre }}</div>
+            <div class="form-text">El tipo se conserva para mantener la serie correlativa del vale.</div>
+        @else
+            <select name="tipo_combustible_id" id="tipo_combustible_id"
+                    class="form-select @error('tipo_combustible_id') is-invalid @enderror" required>
+                <option value="">Seleccione combustible...</option>
+                @foreach($tiposCombustible as $tipo)
+                    <option value="{{ $tipo->id }}"
+                            data-ubicacion="{{ str_contains(mb_strtoupper($tipo->nombre, 'UTF-8'), 'DIESEL') || str_contains(mb_strtoupper($tipo->nombre, 'UTF-8'), 'DIÉSEL') ? 'diesel' : 'gasolina' }}"
+                            @selected(old('tipo_combustible_id') == $tipo->id)>
+                        {{ $tipo->nombre }}
+                    </option>
+                @endforeach
+            </select>
+            @error('tipo_combustible_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+        @endif
     </div>
 
 
@@ -535,7 +507,7 @@
                     </div>
 
                     <div class="display-6 fw-bold text-success">
-                        N.º {{ sprintf('%06d', $valeCombustible->numero_vale) }}
+                        N.º {{ $valeCombustible->numero_vale_formateado }}
                     </div>
 
                     <hr>
@@ -576,6 +548,7 @@
                         ) }}"
                            class="btn btn-outline-secondary">
 
+                            <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
                             Cancelar
 
                         </a>
@@ -602,6 +575,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const select =
         document.getElementById('vehiculo_id');
+    const tipo = document.getElementById('tipo_combustible_id');
+    const estacion = document.getElementById('estacion_servicio_id');
+    const lugar = document.getElementById('lugar_entrega_id');
+    const estaciones = document.getElementById('estacionServicioContainer');
+    const lugares = document.getElementById('lugarEntregaContainer');
 
     const panel =
         document.getElementById('datosVehiculo');
@@ -675,11 +653,28 @@ document.addEventListener('DOMContentLoaded', function () {
 
     }
 
+    function actualizarUbicacion() {
+        if (!tipo) {
+            return;
+        }
+
+        const diesel = tipo.selectedOptions[0]?.dataset.ubicacion === 'diesel';
+        estaciones?.classList.remove('d-none');
+        lugares?.classList.toggle('d-none', !diesel);
+        if (estacion) estacion.disabled = false;
+        if (lugar) {
+            lugar.disabled = !diesel;
+        }
+    }
+
 
     select?.addEventListener(
         'change',
         actualizar
     );
+
+    tipo?.addEventListener('change', actualizarUbicacion);
+    actualizarUbicacion();
 
 
     actualizar();

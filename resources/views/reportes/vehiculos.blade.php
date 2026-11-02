@@ -1,5 +1,5 @@
-```blade
-@extends('layouts.app')
+@extends(request()->boolean('fragment') ? 'reportes.layouts.fragmento' : 'layouts.app')
+@include('reportes.partials.auto-print')
 
 @section('title', 'Reporte por Vehículo')
 
@@ -326,14 +326,13 @@
         </a>
 
 
-        <a href="{{ route('reportes.vehiculos.pdf', request()->query()) }}"
-           target="_blank"
-           class="btn btn-outline-danger">
+   <a href="{{ route('reportes.vehiculos.pdf', request()->query()) }}"
+   class="btn btn-outline-danger">
 
-            <i class="bi bi-file-earmark-pdf me-1"></i>
-            PDF
+    <i class="bi bi-file-earmark-pdf me-1"></i>
+    PDF
 
-        </a>
+</a>
 
 
         <button type="button"
@@ -450,6 +449,7 @@
 
             <form method="GET"
                   action="{{ route('reportes.vehiculos') }}">
+                <input type="hidden" name="ambito" value="{{ request('ambito', 'todos') }}">
 
                 <div class="row g-3">
 
@@ -495,11 +495,14 @@
                             Fecha inicial
                         </label>
 
-                        <input
-                            type="date"
-                            name="fecha_inicio"
-                            class="form-control"
-                            value="{{ request('fecha_inicio') }}">
+                       <input
+    type="date"
+    id="fecha_inicio"
+    name="fecha_inicio"
+    class="form-control"
+    value="{{ request('fecha_inicio') }}"
+    onclick="this.showPicker()"
+>
 
                     </div>
 
@@ -511,11 +514,14 @@
                             Fecha final
                         </label>
 
-                        <input
-                            type="date"
-                            name="fecha_fin"
-                            class="form-control"
-                            value="{{ request('fecha_fin') }}">
+                      <input
+    type="date"
+    id="fecha_fin"
+    name="fecha_fin"
+    class="form-control"
+    value="{{ request('fecha_fin') }}"
+    onclick="this.showPicker()"
+>
 
                     </div>
 
@@ -699,9 +705,15 @@
 
                         <tr>
 
+                            <th>FECHA</th>
+
+                            <th>N.º DE VALE</th>
+
                             <th>
                                 N.º
                             </th>
+
+                            <th>COMBUSTIBLE</th>
 
                             <th>
                                 CÓDIGO DE<br>
@@ -761,12 +773,18 @@
 
                             <tr>
 
+                                <td>{{ $fila->fecha?->format('d/m/Y') ?? '—' }}</td>
+
+                                <td>{{ str_pad((string) $fila->numero_vale, 6, '0', STR_PAD_LEFT) }}</td>
+
                                 {{-- N.º --}}
                                 <td class="text-center">
 
                                     {{ $indice + 1 }}
 
                                 </td>
+
+                                <td>{{ $fila->combustible }}</td>
 
 
                                 {{-- CÓDIGO --}}
@@ -895,7 +913,7 @@
 
                             <tr>
 
-                                <td colspan="11"
+                                <td colspan="14"
                                     class="text-center text-muted py-4">
 
                                     <i class="bi bi-inbox fs-4 d-block mb-2"></i>
@@ -917,7 +935,7 @@
 
                             <tr class="fw-bold table-light">
 
-                                <td colspan="8"
+                                <td colspan="11"
                                     class="text-end">
 
                                     TOTAL
@@ -964,6 +982,13 @@
 
             </div>
 
+            @if(trim($observaciones) !== '')
+                <div class="observaciones-reporte mt-3">
+                    <strong>OBSERVACIONES:</strong>
+                    <p class="mb-0">{{ $observaciones }}</p>
+                </div>
+            @endif
+
         </div>
 
     </div>
@@ -971,4 +996,3 @@
 </div>
 
 @endsection
-```

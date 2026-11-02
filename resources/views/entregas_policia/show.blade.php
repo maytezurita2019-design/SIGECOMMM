@@ -105,6 +105,8 @@
             class="btn btn-ep"
             target="_blank"
             href="{{ route('entregas-policia.imprimir', $entregaPolicia) }}"
+            aria-label="Imprimir pendientes o descargar PDF"
+            title="Imprimir pendientes o descargar PDF"
         >
             <i class="bi bi-printer me-1"></i>
             Imprimir pendientes / PDF
@@ -115,6 +117,7 @@
             class="btn btn-outline-secondary"
             href="{{ route('entregas-policia.index') }}"
         >
+            <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>
             Volver
         </a>
 
@@ -305,6 +308,7 @@
                     type="submit"
                     class="btn btn-ep flex-grow-1"
                 >
+                    <i class="bi bi-funnel me-1" aria-hidden="true"></i>
                     Filtrar
                 </button>
 
@@ -313,6 +317,7 @@
                     href="{{ route('entregas-policia.show', $entregaPolicia) }}"
                     class="btn btn-outline-secondary"
                 >
+                    <i class="bi bi-arrow-counterclockwise me-1" aria-hidden="true"></i>
                     Limpiar
                 </a>
 
@@ -345,6 +350,8 @@
                     <th>Fecha uso</th>
 
                     <th>Vehículo</th>
+
+                    <th>Registrado por</th>
 
                     <th>Acciones</th>
 
@@ -453,6 +460,31 @@
 
 
                         {{-- =========================================
+                             USO REGISTRADO POR
+                        ========================================== --}}
+                        <td>
+                            @if($v->estado === 'UTILIZADO' && $v->uso_registrado_por)
+                                @php
+                                    $usuarioUso = \Illuminate\Support\Facades\DB::table('usuarios')
+                                        ->where('id', $v->uso_registrado_por)
+                                        ->first();
+                                @endphp
+
+                                @if($usuarioUso)
+                                    <span class="text-success fw-semibold">
+                                        <i class="bi bi-person-check me-1"></i>
+                                        {{ trim(($usuarioUso->nombre ?? '') . ' ' . ($usuarioUso->apellido ?? '')) ?: 'Usuario sin nombre' }}
+                                    </span>
+                                @else
+                                    <span class="text-muted">Usuario no disponible</span>
+                                @endif
+                            @else
+                                <span class="text-muted">—</span>
+                            @endif
+                        </td>
+
+
+                        {{-- =========================================
                              ACCIONES
                         ========================================== --}}
                         <td>
@@ -526,7 +558,7 @@
                     <tr>
 
                         <td
-                            colspan="5"
+                            colspan="6"
                             class="text-center text-muted py-5"
                         >
 
@@ -671,6 +703,7 @@
                                 data-bs-dismiss="modal"
                             >
 
+                                <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
                                 Cancelar
 
                             </button>
@@ -681,6 +714,7 @@
                                 class="btn btn-danger"
                             >
 
+                                <i class="bi bi-check-circle me-1" aria-hidden="true"></i>
                                 Confirmar cierre
 
                             </button>

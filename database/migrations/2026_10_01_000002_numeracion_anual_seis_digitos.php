@@ -6,6 +6,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        if (!Schema::hasTable('numeraciones_vales')) {
+            Schema::create('numeraciones_vales', function (Blueprint $table) {
+                $table->unsignedSmallInteger('anio')->primary();
+                $table->unsignedInteger('ultimo_numero')->default(0);
+            });
+        }
+
         $vales = DB::table('vales_combustible as v')->join('periodos as p', 'p.id', '=', 'v.periodo_id')->select('v.id', 'v.numero_vale', 'p.anio')->get();
         $vistos = [];
         foreach ($vales as $vale) {
@@ -15,13 +22,40 @@ return new class extends Migration {
             }
             $vistos[$clave] = true;
         }
-        Schema::create('numeraciones_vales', function (Blueprint $table) {
-            $table->unsignedSmallInteger('anio')->primary();
-            $table->unsignedInteger('ultimo_numero')->default(0);
-        });
         foreach (DB::table('periodos')->distinct()->pluck('anio') as $anio) {
             DB::table('numeraciones_vales')->insert(['anio' => $anio, 'ultimo_numero' => $vales->where('anio', $anio)->max('numero_vale') ?? 0]);
         }
+
+        if (DB::connection()->getDriverName() !== 'pgsql') {
+            Schema::table('vales_combustible', function (Blueprint $table) {
+                $table->unsignedSmallInteger('anio')->nullable();
+            });
+
+            foreach ($vales as $vale) {
+                DB::table('vales_combustible')
+                    ->where('id', $vale->id)
+                    ->update(['anio' => $vale->anio]);
+            }
+
+            foreach (Schema::getIndexes('vales_combustible') as $index) {
+                if (
+                    ($index['unique'] ?? false)
+                    && ($index['columns'] ?? []) === ['periodo_id', 'numero_vale']
+                ) {
+                    Schema::table('vales_combustible', function (Blueprint $table) use ($index) {
+                        $table->dropUnique($index['name']);
+                    });
+                }
+            }
+
+            Schema::table('vales_combustible', function (Blueprint $table) {
+                $table->unsignedSmallInteger('anio')->nullable(false)->change();
+                $table->unique(['anio', 'numero_vale']);
+            });
+
+            return;
+        }
+
         Schema::table('vales_combustible', function (Blueprint $table) {
             $table->dropUnique(['periodo_id', 'numero_vale']);
             $table->string('numero_vale', 6)->change();

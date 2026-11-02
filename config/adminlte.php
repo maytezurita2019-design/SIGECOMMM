@@ -764,6 +764,7 @@ return [
     | https://jeroennoten.github.io/Laravel-AdminLTE/sections/configuration/menu.html
     |
     */
+
 'menu' => [
 
     /*
@@ -783,7 +784,6 @@ return [
         'active' => ['dashboard'],
     ],
 
-
     /*
     |--------------------------------------------------------------------------
     | SEGURIDAD - SOLO ADMINISTRADOR
@@ -799,13 +799,12 @@ return [
         'text' => 'Seguridad',
         'icon' => 'bi bi-shield-lock',
         'can' => 'administrador',
-        'active' => [
-            'usuarios/*',
-            'roles/*',
-        ],
+    'active' => [
+    'usuarios/*',
+    'roles/*',
+],
 
         'submenu' => [
-
             [
                 'text' => 'Usuarios',
                 'route' => 'usuarios.index',
@@ -823,27 +822,27 @@ return [
         ],
     ],
 
-
     /*
     |--------------------------------------------------------------------------
-    | PARQUE AUTOMOTOR
+    | PARQUE AUTOMOTOR - TECNICO I Y TECNICO II
     |--------------------------------------------------------------------------
     */
 
     [
         'header' => 'PARQUE AUTOMOTOR',
+        'can' => 'combustible-consultar-vehiculos',
     ],
 
     [
         'text' => 'Parque Automotor',
         'icon' => 'bi bi-car-front-fill',
+        'can' => 'combustible-consultar-vehiculos',
         'active' => [
             'vehiculos/*',
             'unidades/*',
         ],
 
         'submenu' => [
-
             [
                 'text' => 'Vehículos',
                 'route' => 'vehiculos.index',
@@ -857,97 +856,126 @@ return [
                 'icon' => 'bi bi-building',
                 'active' => ['unidades/*'],
             ],
-
         ],
     ],
 
-
     /*
     |--------------------------------------------------------------------------
-    | COMBUSTIBLE
+    | COMBUSTIBLE - TECNICO I Y TECNICO II
     |--------------------------------------------------------------------------
     */
 
     [
         'header' => 'COMBUSTIBLE',
+        'can' => 'combustible-operar',
     ],
 
     [
         'text' => 'Combustible',
         'icon' => 'bi bi-fuel-pump-fill',
-        'active' => [
-            'lotes-vales/*',
-            'vales-combustible/*',
-            'entregas-policia/*',
-            'partes-diarios/*',
-        ],
+        'can' => 'combustible-operar',
+       'active' => [
+    'lotes-vales/*',
+    'vales-combustible/*',
+    'entregas-policia/*',
+    'partes-diarios/*',
+    'precios-combustible/*',
+    'series-correlativas*',
+],
 
         'submenu' => [
-
             [
                 'text' => 'Lotes de vales',
                 'route' => 'lotes-vales.index',
                 'icon' => 'bi bi-collection',
-                'can' => 'puede-operar',
+                'can' => 'combustible-lotes',
                 'active' => ['lotes-vales/*'],
             ],
 
             [
-                'text' => 'Entregas a Policía',
+                'text' => 'POLICIA',
                 'route' => 'entregas-policia.index',
                 'icon' => 'bi bi-journals',
-                'can' => 'puede-operar',
+                'can' => 'combustible-operar',
                 'active' => ['entregas-policia/*'],
             ],
 
+
+[
+    'text' => 'GAMS',
+    'icon' => 'bi bi-ticket-perforated',
+    'can' => 'combustible-operar',
+    'submenu' => [
+        [
+            'text' => 'Gasolina',
+            'url' => 'vales-combustible?combustible=gasolina',
+            'icon' => 'bi bi-droplet-fill',
+            'can' => 'combustible-operar',
+        ],
+        [
+            'text' => 'Diésel',
+            'url' => 'vales-combustible?combustible=diesel',
+            'icon' => 'bi bi-droplet-half',
+            'can' => 'combustible-operar',
+        ],
+    ],
+],
+[
+    'text' => 'Series correlativas',
+    'route' => 'series-correlativas.index',
+    'icon' => 'bi bi-layers',
+    'active' => ['series-correlativas*'],
+],
             [
-                'text' => 'Vales de combustible',
-                'route' => 'vales-combustible.index',
-                'icon' => 'bi bi-ticket-perforated',
-                'active' => ['vales-combustible/*'],
+                'text' => 'Precios de combustible',
+                'route' => 'precios-combustible.index',
+                'icon' => 'bi bi-currency-dollar',
+                'can' => 'combustible-configurar',
+                'active' => ['precios-combustible/*'],
             ],
 
             [
                 'text' => 'Partes diarios',
                 'route' => 'partes-diarios.index',
                 'icon' => 'bi bi-journal-check',
+                'can' => 'combustible-operar',
                 'active' => ['partes-diarios/*'],
             ],
 
         ],
     ],
 
-
     /*
     |--------------------------------------------------------------------------
-    | CONFIGURACIÓN - SOLO ADMINISTRADOR
+    | CONFIGURACIÓN OPERATIVA - SOLO TECNICO I
     |--------------------------------------------------------------------------
     */
 
     [
-        'header' => 'CONFIGURACIÓN',
-        'can' => 'administrador',
+        'header' => 'CONFIGURACIÓN OPERATIVA',
+        'can' => ['combustible-configurar', 'administrador', 'combustible-operar'],
     ],
 
     [
-        'text' => 'Configuración',
+        'text' => 'Configuración operativa',
         'icon' => 'bi bi-gear-fill',
-        'can' => 'administrador',
+        'can' => ['combustible-configurar', 'administrador', 'combustible-operar'],
         'active' => [
             'periodos/*',
             'tipos-combustible/*',
             'estaciones-servicio/*',
+            'lugares-entrega*',
             'aperturas-programaticas/*',
             'fuentes-financiamiento/*',
             'organismos-financiadores/*',
         ],
 
         'submenu' => [
-
             [
                 'text' => 'Periodos',
                 'route' => 'periodos.index',
                 'icon' => 'bi bi-calendar3',
+                'can' => 'combustible-configurar',
                 'active' => ['periodos/*'],
             ],
 
@@ -955,6 +983,7 @@ return [
                 'text' => 'Tipos de combustible',
                 'route' => 'tipos-combustible.index',
                 'icon' => 'bi bi-droplet-fill',
+                'can' => 'combustible-configurar',
                 'active' => ['tipos-combustible/*'],
             ],
 
@@ -962,13 +991,23 @@ return [
                 'text' => 'Estaciones de servicio',
                 'route' => 'estaciones-servicio.index',
                 'icon' => 'bi bi-geo-alt',
+                'can' => 'combustible-configurar',
                 'active' => ['estaciones-servicio/*'],
+            ],
+
+            [
+                'text' => 'Lugares de entrega',
+                'route' => 'lugares-entrega.index',
+                'icon' => 'bi bi-list-ul',
+                'can' => ['administrador', 'combustible-operar'],
+                'active' => ['lugares-entrega*'],
             ],
 
             [
                 'text' => 'Aperturas programáticas',
                 'route' => 'aperturas-programaticas.index',
                 'icon' => 'bi bi-diagram-3',
+                'can' => 'combustible-configurar',
                 'active' => ['aperturas-programaticas/*'],
             ],
 
@@ -976,6 +1015,7 @@ return [
                 'text' => 'Fuentes de financiamiento',
                 'route' => 'fuentes-financiamiento.index',
                 'icon' => 'bi bi-cash-stack',
+                'can' => 'combustible-configurar',
                 'active' => ['fuentes-financiamiento/*'],
             ],
 
@@ -983,101 +1023,70 @@ return [
                 'text' => 'Organismos financiadores',
                 'route' => 'organismos-financiadores.index',
                 'icon' => 'bi bi-bank',
+                'can' => 'combustible-configurar',
                 'active' => ['organismos-financiadores/*'],
             ],
-
         ],
     ],
 
-
     /*
     |--------------------------------------------------------------------------
-    | REPORTES
+    | REPORTES - TODOS LOS ROLES
     |--------------------------------------------------------------------------
     */
 
     [
-        'header' => 'REPORTES',
-    ],
-
-    [
         'text' => 'Reportes',
+        'route' => 'reportes.index',
         'icon' => 'bi bi-bar-chart-fill',
+        'can' => 'combustible-reportes',
         'active' => ['reportes/*'],
-
-        'submenu' => [
-
-            [
-                'text' => 'Reporte general',
-                'route' => 'reportes.consumo',
-                'icon' => 'bi bi-file-earmark-bar-graph',
-            ],
-
-            [
-                'text' => 'Reporte por vehículo',
-                'route' => 'reportes.vehiculos',
-                'icon' => 'bi bi-car-front-fill',
-            ],
-
-            [
-                'text' => 'Reporte individual',
-                'route' => 'reportes.vehiculo-individual',
-                'icon' => 'bi bi-file-earmark-person',
-            ],
-
-            [
-                'text' => 'Reporte por apertura',
-                'route' => 'reportes.aperturas',
-                'icon' => 'bi bi-diagram-3-fill',
-            ],
-
-        ],
     ],
-
 
     /*
     |--------------------------------------------------------------------------
-    | AUDITORÍA - SOLO ADMINISTRADOR
+    | AUDITORÍA - ADMINISTRADOR Y TECNICO I
     |--------------------------------------------------------------------------
     */
 
     [
         'header' => 'AUDITORÍA',
-        'can' => 'administrador',
+        'can' => 'combustible-auditoria',
     ],
 
     [
         'text' => 'Registro de actividades',
         'route' => 'auditoria.index',
         'icon' => 'bi bi-clock-history',
-        'can' => 'administrador',
+        'can' => 'combustible-auditoria',
         'active' => ['auditoria/*'],
     ],
+
     /*
-/*
-|--------------------------------------------------------------------------
-| BARRA SUPERIOR
-|--------------------------------------------------------------------------
-*/
+    |--------------------------------------------------------------------------
+    | BARRA SUPERIOR
+    |--------------------------------------------------------------------------
+    */
 
-[
-    'text' => 'Gestión de Provisión de Combustible',
-    'icon' => 'bi bi-fuel-pump-fill',
-    'topnav' => true,
+    [
+        'text' => 'Gestión de Provisión de Combustible',
+        'icon' => 'bi bi-fuel-pump-fill',
+        'topnav' => true,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | PANTALLA COMPLETA
+    |--------------------------------------------------------------------------
+    */
+
+    [
+        'type' => 'fullscreen-widget',
+        'topnav_right' => true,
+    ],
+
 ],
 
-/*
-|--------------------------------------------------------------------------
-| PANTALLA COMPLETA
-|--------------------------------------------------------------------------
-*/
-
-[
-    'type' => 'fullscreen-widget',
-    'topnav_right' => true,
-],
-
-],
     /*
     |--------------------------------------------------------------------------
     | Menu Filters

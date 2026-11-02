@@ -85,11 +85,13 @@ Inactivo
 </div>
 
 <button class="btn btn-primary">
+    <i class="bi bi-save me-1" aria-hidden="true"></i>
 Actualizar
 </button>
 
 <a href="{{ route('unidades.index') }}"
 class="btn btn-secondary">
+<i class="bi bi-x-lg me-1" aria-hidden="true"></i>
 Cancelar
 </a>
 

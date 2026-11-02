@@ -5,293 +5,593 @@
 @section('content')
 
 <h2>
+
     {{ isset($loteVale) ? 'Editar lote de vales' : 'Nuevo lote de vales' }}
+
 </h2>
 
 @if($errors->any())
+
     <div class="alert alert-danger">
+
         <ul class="mb-0">
+
             @foreach($errors->all() as $error)
+
                 <li>{{ $error }}</li>
+
             @endforeach
+
         </ul>
+
     </div>
+
 @endif
 
+@if(!empty($errorSerie))
+
+    <div class="alert alert-warning" role="alert">{{ $errorSerie }}</div>
+
+@endif
+
+@php
+
+    $editando = isset($loteVale);
+
+    $numeroInicialActual = old(
+
+        'numero_inicial',
+
+        $editando
+
+            ? $loteVale->numero_inicial
+
+            : ($numeroSugerido ?? '')
+
+    );
+
+    $numeroFinalActual = old(
+
+        'numero_final',
+
+        $editando ? $loteVale->numero_final : ''
+
+    );
+
+    $cantidadActual = old(
+
+        'cantidad_vales',
+
+        $editando
+
+            ? ((int) $loteVale->numero_final - (int) $loteVale->numero_inicial + 1)
+
+            : ''
+
+    );
+
+    $numeroInicialParaMostrar = (string) $numeroInicialActual;
+
+    if (
+
+        preg_match('/\A[0-9]+\z/', $numeroInicialParaMostrar) === 1
+
+        && (int) $numeroInicialParaMostrar >= 1
+
+        && (int) $numeroInicialParaMostrar <= 999999
+
+    ) {
+
+        $numeroInicialParaMostrar = sprintf(
+
+            '%06d',
+
+            (int) $numeroInicialParaMostrar
+
+        );
+
+    }
+
+    $numeroFinalParaMostrar = (string) $numeroFinalActual;
+
+    if (
+
+        preg_match('/\A[0-9]+\z/', $numeroFinalParaMostrar) === 1
+
+        && (int) $numeroFinalParaMostrar >= 1
+
+        && (int) $numeroFinalParaMostrar <= 999999
+
+    ) {
+
+        $numeroFinalParaMostrar = sprintf(
+
+            '%06d',
+
+            (int) $numeroFinalParaMostrar
+
+        );
+
+    }
+
+@endphp
+
 <div class="card shadow-sm">
+
     <div class="card-body">
 
         <form
+
             method="POST"
-            action="{{ isset($loteVale)
+
+            action="{{ $editando
+
                 ? route('lotes-vales.update', $loteVale)
+
                 : route('lotes-vales.store') }}"
+
         >
 
             @csrf
-            <input
-    type="hidden"
-    name="iniciar_nueva_serie"
-    id="iniciar_nueva_serie"
-    value="0"
->
 
-            @isset($loteVale)
+            @if($editando)
+
                 @method('PUT')
-            @endisset
+
+            @endif
+
+            @unless($editando)
+
+                <div class="alert alert-light border">
+
+                    Serie <strong>{{ $codigoSerie ?? 'POL-GAS' }}</strong>
+
+                    · Gestión <strong>{{ $anioSerie ?? now()->year }}</strong>
+
+                    · Último correlativo
+
+                    <strong>{{ sprintf('%06d', $ultimoNumero ?? 0) }}</strong>
+
+                </div>
+
+            @endunless
 
             <div class="row">
 
-                {{-- NÚMERO SUGERIDO --}}
-@if(!isset($loteVale))
-    <div class="col-12 mb-3">
-        <div class="alert alert-success d-flex justify-content-between align-items-center flex-wrap gap-2 mb-0">
-
-            <div>
-                <small class="d-block">
-                    Siguiente número sugerido
-                </small>
-
-                <strong style="font-size: 1.2rem;">
-                    N.º {{ str_pad($numeroSugerido, 6, '0', STR_PAD_LEFT) }}
-                </strong>
-
-                @if($ultimoNumero > 0)
-                    <small class="d-block text-muted mt-1">
-                        Último número utilizado:
-                        N.º {{ str_pad($ultimoNumero, 6, '0', STR_PAD_LEFT) }}
-                    </small>
-                @endif
-            </div>
-
-            <button
-                type="button"
-                id="usar-numero-sugerido"
-                class="btn btn-success"
-                data-numero="{{ $numeroSugerido }}"
-            >
-                <i class="bi bi-check-lg"></i>
-                Usar
-            </button>
-
-        </div>
-    </div>
-@endif
-
                 {{-- NÚMERO INICIAL --}}
+
                 <div class="col-md-6 mb-3">
+
                     <label for="numero_inicial" class="form-label">
+
                         Número inicial *
+
                     </label>
 
                     <input
+
                         id="numero_inicial"
-                        type="number"
+
+                        type="text"
+
                         name="numero_inicial"
-                        min="1"
-                        step="1"
+
+                        inputmode="numeric"
+
+                        pattern="[0-9]+"
+
+                        maxlength="6"
+
                         class="form-control"
-                        value="{{ old('numero_inicial', $loteVale->numero_inicial ?? '') }}"
+
+                        value="{{ $numeroInicialParaMostrar }}"
+
                         required
-                    >
-                </div>
 
-                {{-- CANTIDAD --}}
-                <div class="col-md-6 mb-3">
-                    <label for="cantidad_vales" class="form-label">
-                        Cantidad de vales *
-                    </label>
-
-                    <input
-                        id="cantidad_vales"
-                        type="number"
-                        name="cantidad_vales"
-                        min="1"
-                        step="1"
-                        class="form-control"
-                        value="{{ old('cantidad_vales') }}"
-                        placeholder="Ej.: 200, 500, 8000"
-                        required
-                    >
-                </div>
-
-                {{-- NÚMERO FINAL --}}
-                <div class="col-md-6 mb-3">
-                    <label for="numero_final" class="form-label">
-                        Número final *
-                    </label>
-
-                    <input
-                        id="numero_final"
-                        type="number"
-                        name="numero_final"
-                        min="1"
-                        step="1"
-                        class="form-control"
-                        value="{{ old('numero_final', $loteVale->numero_final ?? '') }}"
-                        readonly
-                        required
                     >
 
                     <small class="text-muted">
-                        Se calcula automáticamente según el número inicial y la cantidad.
+
+                        El número se muestra con seis dígitos.
+
                     </small>
+
                 </div>
 
-                {{-- FECHA --}}
+                {{-- CANTIDAD --}}
+
                 <div class="col-md-6 mb-3">
-                    <label for="fecha_recepcion" class="form-label">
-                        Fecha de recepción *
+
+                    <label for="cantidad_vales" class="form-label">
+
+                        Cantidad de vales *
+
                     </label>
 
                     <input
-                        id="fecha_recepcion"
-                        name="fecha_recepcion"
-                        type="date"
+
+                        id="cantidad_vales"
+
+                        type="number"
+
+                        name="cantidad_vales"
+
+                        min="1"
+
+                        max="999999"
+
+                        step="1"
+
                         class="form-control"
-                        value="{{ old(
-                            'fecha_recepcion',
-                            isset($loteVale)
-                                ? $loteVale->fecha_recepcion->format('Y-m-d')
-                                : date('Y-m-d')
-                        ) }}"
+
+                        value="{{ $cantidadActual }}"
+
+                        placeholder="Ej.: 200, 500, 8000"
+
                         required
+
                     >
+
+                </div>
+
+                {{-- NÚMERO FINAL --}}
+
+                <div class="col-md-6 mb-3">
+
+                    <label for="numero_final" class="form-label">
+
+                        Número final *
+
+                    </label>
+
+                    <input
+
+                        id="numero_final"
+
+                        type="text"
+
+                        name="numero_final"
+
+                        inputmode="numeric"
+
+                        pattern="[0-9]+"
+
+                        maxlength="6"
+
+                        class="form-control"
+
+                        value="{{ $numeroFinalParaMostrar }}"
+
+                        readonly
+
+                        required
+
+                    >
+
+                    <small class="text-muted">
+
+                        Se calcula automáticamente según el número inicial y la cantidad.
+
+                    </small>
+
+                </div>
+
+                {{-- FECHA --}}
+
+                <div class="col-md-6 mb-3">
+
+                    <label for="fecha_recepcion" class="form-label">
+
+                        Fecha de recepción *
+
+                    </label>
+
+                    <input
+
+                        id="fecha_recepcion"
+
+                        name="fecha_recepcion"
+
+                        type="date"
+
+                        class="form-control"
+
+                        value="{{ old(
+
+                            'fecha_recepcion',
+
+                            $editando
+
+                                ? $loteVale->fecha_recepcion->format('Y-m-d')
+
+                                : date('Y-m-d')
+
+                        ) }}"
+
+                        required
+
+                    >
+
                 </div>
 
                 {{-- PERÍODO --}}
+
                 <div class="col-md-6 mb-3">
+
                     <label for="periodo_id" class="form-label">
+
                         Período *
+
                     </label>
 
                     <select
+
                         id="periodo_id"
+
                         name="periodo_id"
+
                         class="form-select"
+
                         required
+
                     >
-                        <option value="">
-                            Seleccione un período...
-                        </option>
+
+                        <option value="">Seleccione un período...</option>
 
                         @foreach($periodos as $periodo)
-                            <option
-                                value="{{ $periodo->id }}"
-                                @selected(
-                                    old(
-                                        'periodo_id',
-                                        $loteVale->periodo_id ?? ''
-                                    ) == $periodo->id
+
+                            @if(
+
+                                $editando ||
+
+                                (
+
+                                    (int) $periodo->anio === (int) now()->year &&
+
+                                    (int) $periodo->mes === (int) now()->month
+
                                 )
-                            >
-                                {{ $periodo->nombre }}
-                                ·
-                                {{ $periodo->fecha_inicio->format('d/m/Y') }}
-                                al
-                                {{ $periodo->fecha_fin->format('d/m/Y') }}
-                            </option>
+
+                            )
+
+                                <option
+
+                                    value="{{ $periodo->id }}"
+
+                                    @selected(
+
+                                        old(
+
+                                            'periodo_id',
+
+                                            $editando ? $loteVale->periodo_id : null
+
+                                        ) == $periodo->id
+
+                                    )
+
+                                >
+
+                                    {{ $periodo->nombre }}
+
+                                    ·
+
+                                    {{ $periodo->fecha_inicio->format('d/m/Y') }}
+
+                                    al
+
+                                    {{ $periodo->fecha_fin->format('d/m/Y') }}
+
+                                </option>
+
+                            @endif
+
                         @endforeach
+
                     </select>
+
                 </div>
 
             </div>
 
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" @disabled(!empty($errorSerie) && !$editando)>
+
+                <i class="bi bi-save me-1" aria-hidden="true"></i>
+
                 Guardar
+
             </button>
 
             <a
+
                 href="{{ route('lotes-vales.index') }}"
+
                 class="btn btn-secondary"
+
             >
+
+                <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
+
                 Cancelar
+
             </a>
 
         </form>
 
     </div>
+
 </div>
 
 <script>
+
 document.addEventListener('DOMContentLoaded', function () {
 
     const inicio = document.getElementById('numero_inicial');
+
     const cantidad = document.getElementById('cantidad_vales');
+
     const fin = document.getElementById('numero_final');
-    const botonSugerido = document.getElementById('usar-numero-sugerido');
-    const nuevaSerie = document.getElementById('iniciar_nueva_serie');
 
-const numeroSugerido = @json($numeroSugerido ?? null);
+    function formatearNumero(numero) {
 
-if (botonSugerido) {
-    botonSugerido.addEventListener('click', function () {
+        return String(numero).padStart(6, '0');
 
-        inicio.value = this.dataset.numero;
+    }
 
-        inicio.dispatchEvent(new Event('input'));
-
-        inicio.focus();
-    });
-}
     function calcularNumeroFinal() {
 
-        const numeroInicial = parseInt(inicio.value, 10);
-        const cantidadVales = parseInt(cantidad.value, 10);
+        const textoInicio = inicio.value.trim();
+
+        const textoCantidad = cantidad.value.trim();
 
         if (
-            Number.isInteger(numeroInicial) &&
-            numeroInicial >= 1 &&
-            Number.isInteger(cantidadVales) &&
-            cantidadVales >= 1
+
+            !/^[0-9]+$/.test(textoInicio) ||
+
+            !/^[0-9]+$/.test(textoCantidad)
+
         ) {
-            fin.value = numeroInicial + cantidadVales - 1;
-        } else {
+
             fin.value = '';
+
+            return;
+
         }
+
+        const numeroInicial = Number(textoInicio);
+
+        const cantidadVales = Number(textoCantidad);
+
+        if (
+
+            Number.isSafeInteger(numeroInicial) &&
+
+            numeroInicial >= 1 &&
+
+            numeroInicial <= 999999 &&
+
+            Number.isSafeInteger(cantidadVales) &&
+
+            cantidadVales >= 1 &&
+
+            cantidadVales <= 999999
+
+        ) {
+
+            const numeroFinal = numeroInicial + cantidadVales - 1;
+
+            fin.value = Number.isSafeInteger(numeroFinal) && numeroFinal <= 999999
+
+                ? formatearNumero(numeroFinal)
+
+                : '';
+
+        } else {
+
+            fin.value = '';
+
+        }
+
     }
 
     inicio.addEventListener('input', calcularNumeroFinal);
+
     cantidad.addEventListener('input', calcularNumeroFinal);
+
+    inicio.addEventListener('input', function () {
+
+        inicio.setCustomValidity('');
+
+    });
+
+    cantidad.addEventListener('input', function () {
+
+        cantidad.setCustomValidity('');
+
+    });
+
+    inicio.addEventListener('blur', function () {
+
+        const valor = inicio.value.trim();
+
+        if (/^[0-9]+$/.test(valor) && Number(valor) >= 1) {
+
+            inicio.value = formatearNumero(Number(valor));
+
+        }
+
+        calcularNumeroFinal();
+
+    });
 
     calcularNumeroFinal();
 
     const formulario = inicio.closest('form');
 
-formulario.addEventListener('submit', function (event) {
+    formulario.addEventListener('submit', function (event) {
 
-    const numeroInicial = parseInt(inicio.value, 10);
-    const sugerido = parseInt(numeroSugerido, 10);
+        const numeroInicial = Number(inicio.value);
 
-    nuevaSerie.value = '0';
+        const cantidadVales = Number(cantidad.value);
 
-    if (
-        Number.isInteger(numeroInicial) &&
-        Number.isInteger(sugerido) &&
-        numeroInicial < sugerido
-    ) {
+        const numeroInicialValido =
 
-        const confirmar = confirm(
-            'El número ingresado es menor al correlativo actual.\n\n' +
-            'Último número de la serie actual: N.º ' +
-            String(sugerido - 1).padStart(6, '0') +
-            '\n\n' +
-            'Nueva serie desde: N.º ' +
-            String(numeroInicial).padStart(6, '0') +
-            '\n\n' +
-            '¿Desea iniciar una nueva serie?'
-        );
+            /^[0-9]+$/.test(inicio.value.trim()) &&
 
-        if (!confirmar) {
+            Number.isSafeInteger(numeroInicial) &&
+
+            numeroInicial >= 1 &&
+
+            numeroInicial <= 999999;
+
+        const cantidadValida =
+
+            /^[0-9]+$/.test(cantidad.value.trim()) &&
+
+            Number.isSafeInteger(cantidadVales) &&
+
+            cantidadVales >= 1 &&
+
+            cantidadVales <= 999999;
+
+        calcularNumeroFinal();
+
+        if (!numeroInicialValido) {
+
             event.preventDefault();
-            nuevaSerie.value = '0';
+
+            inicio.setCustomValidity(
+
+                'El número inicial debe estar entre 000001 y 999999.'
+
+            );
+
+            inicio.reportValidity();
+
             return;
+
         }
 
-        nuevaSerie.value = '1';
-    }
+        if (!cantidadValida || fin.value === '') {
+
+            event.preventDefault();
+
+            cantidad.setCustomValidity(
+
+                'La cantidad debe ser un entero positivo y el rango no puede superar 999999.'
+
+            );
+
+            cantidad.reportValidity();
+
+            return;
+
+        }
+
+    });
+
 });
-});
+
 </script>
 
 @endsection

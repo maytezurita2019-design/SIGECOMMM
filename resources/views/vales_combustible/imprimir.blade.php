@@ -1,4 +1,35 @@
-```blade
+@php
+// El diseño especial se aplica únicamente a vales GAMS de diésel.
+// Normalizamos espacios y tildes para reconocer nombres como "Diésel Oil".
+$nombreCombustible = mb_strtoupper(trim((string) ($valeCombustible->tipoCombustible?->nombre ?? '')), 'UTF-8');
+$nombreCombustible = preg_replace('/\s+/u', ' ', $nombreCombustible);
+$nombreCombustible = str_replace('É', 'E', $nombreCombustible);
+
+
+    $nombreCombustible = mb_strtoupper(
+        trim((string) ($valeCombustible->tipoCombustible?->nombre ?? '')),
+        'UTF-8'
+    );
+
+    $nombreCombustible = str_replace(
+        ['É', 'È', 'Ê'],
+        'E',
+        $nombreCombustible
+    );
+
+    $nombreCombustible = preg_replace(
+        '/\s+/u',
+        ' ',
+        $nombreCombustible
+    );
+
+    $esDiesel = !$valeCombustible->entrega_policia_id && in_array(
+        $nombreCombustible,
+        ['DIESEL', 'DIESEL OIL'],
+        true
+    );
+@endphp
+
 <!doctype html>
 <html lang="es">
 
@@ -7,7 +38,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <title>
-        Vale {{ $valeCombustible->numero_vale }}
+        Vale {{ $numeroValeFormateado }}
     </title>
 
     <style>
@@ -150,6 +181,178 @@
             letter-spacing: .5px;
         }
 
+        .vale-diesel .direccion .numero {
+            margin-top: 8px;
+        }
+
+        .diesel-contenido {
+            padding: 14px 25px 0;
+            font-size: 15px;
+        }
+
+        .diesel-fila {
+            display: flex;
+            align-items: flex-end;
+            gap: 8px;
+            min-height: 23px;
+            margin-bottom: 11px;
+        }
+
+        .diesel-etiqueta {
+            flex: 0 0 auto;
+            white-space: nowrap;
+        }
+
+        .diesel-linea {
+            flex: 1;
+            min-width: 0;
+            min-height: 24px;
+            padding: 0 6px 3px;
+            border-bottom: 1px dotted #777;
+        }
+
+        .diesel-detalle {
+            align-items: flex-start;
+        }
+
+        .diesel-detalle .diesel-etiqueta {
+            padding-top: 3px;
+        }
+
+        .diesel-detalle-linea {
+            flex: 1;
+            min-width: 0;
+            min-height: 34px;
+            padding: 2px 6px 4px;
+            border-bottom: 1px dotted #777;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+            white-space: pre-wrap;
+        }
+
+        .diesel-cantidad {
+            max-width: 45%;
+        }
+
+        .diesel-vehiculo .diesel-grupo {
+            display: flex;
+            align-items: flex-end;
+            flex: 1;
+            gap: 6px;
+            min-width: 0;
+        }
+
+        .diesel-fecha {
+            justify-content: center;
+            margin-top: 14px;
+        }
+
+        .diesel-fecha .diesel-linea {
+            flex: 0 1 270px;
+            text-align: center;
+        }
+
+        .firmas-diesel {
+            grid-template-columns: repeat(3, 1fr);
+            gap: 28px;
+            padding: 38px 30px 16px;
+        }
+
+        .firmas-diesel .firma-subtitulo {
+            font-size: 11px;
+        }
+
+        /* =====================================================
+           FORMATO FÍSICO EXCLUSIVO DIÉSEL GAMS
+           No modifica el diseño normal de gasolina / Policía.
+        ===================================================== */
+        .vale-diesel {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .vale-diesel .diesel-detalle-linea {
+            min-height: 2.8em;
+            border-bottom: 0;
+            background-image: linear-gradient(
+                to bottom,
+                transparent calc(1.4em - 1px),
+                #777 1.4em,
+                transparent calc(1.4em + 1px)
+            );
+            background-size: 100% 1.4em;
+        }
+
+        .vale-diesel .encabezado {
+            grid-template-columns: 33% 42% 25%;
+            min-height: 138px;
+        }
+
+        .vale-diesel .encabezado > div {
+            padding: 12px 10px;
+        }
+
+        .vale-diesel .secretaria {
+            font-size: 16px;
+        }
+
+        .vale-diesel .direccion {
+            font-size: 13px;
+        }
+
+        .vale-diesel .direccion .numero {
+            margin-top: 10px;
+            font-size: 21px;
+            color: #a56868;
+            letter-spacing: 3px;
+        }
+
+        .vale-diesel .titulo {
+            font-size: 25px;
+            padding: 10px 12px;
+        }
+
+        .vale-diesel .diesel-contenido {
+            padding: 22px 28px 0;
+            font-size: 17px;
+            flex: 1;
+        }
+
+        .vale-diesel .diesel-fila {
+            min-height: 34px;
+            margin-bottom: 17px;
+        }
+
+        .vale-diesel .diesel-detalle-linea {
+            min-height: 56px;
+        }
+
+        .vale-diesel .diesel-cantidad {
+            max-width: 52%;
+        }
+
+        .vale-diesel .diesel-fecha {
+            margin-top: 22px;
+        }
+
+        .vale-diesel .firmas-diesel {
+            padding: 12px 25px 18px;
+            gap: 22px;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .vale-diesel .firmas-diesel .firma {
+            min-height: 74px;
+        }
+
+        .vale-diesel .firmas-diesel .firma-titulo {
+            font-size: 12px;
+        }
+
+        .vale-diesel .firmas-diesel .firma-subtitulo {
+            font-size: 10px;
+        }
+
         /* =====================================================
            CONTENIDO
         ===================================================== */
@@ -263,6 +466,13 @@
             margin: 5mm;
         }
 
+        /* Página nombrada exclusiva de DIÉSEL GAMS: carta vertical.
+           La regla @page sin nombre permanece igual para GASOLINA/POLICÍA. */
+        @page diesel-gams {
+            size: letter portrait;
+            margin: 0;
+        }
+
         @media print {
 
             html,
@@ -272,6 +482,17 @@
                 margin: 0;
                 padding: 0;
                 background: #ffffff;
+            }
+
+            /* Solo el vale GAMS diésel utiliza la hoja carta vertical completa.
+               El vale mide media carta y ocupa la mitad superior. */
+            html:has(.vale-diesel),
+            body:has(.vale-diesel) {
+                width: 215.9mm;
+                height: 279.4mm;
+                min-height: 279.4mm;
+                margin: 0;
+                padding: 0;
             }
 
             .acciones {
@@ -288,6 +509,118 @@
                 border: 1px solid #555;
                 break-inside: avoid;
                 page-break-inside: avoid;
+            }
+
+            .vale-diesel {
+                page: diesel-gams;
+                position: relative;
+                width: 215.9mm;
+                height: 139.7mm;
+                min-height: 0;
+                margin: 0;
+                border: 0;
+                overflow: hidden;
+                break-after: avoid-page;
+                page-break-after: avoid;
+            }
+
+            .vale-diesel::before {
+                content: "";
+                position: absolute;
+                z-index: 1;
+                inset: 4mm;
+                border: 1px solid #555;
+                pointer-events: none;
+            }
+
+            .vale-diesel .encabezado {
+                flex: 0 0 29mm;
+                min-height: 29mm;
+            }
+
+            .vale-diesel .encabezado > div {
+                padding: 4mm 5mm;
+            }
+
+            .vale-diesel .logo-sacaba {
+                max-width: 55mm;
+                max-height: 21mm;
+            }
+
+            .vale-diesel .secretaria {
+                font-size: 11pt;
+            }
+
+            .vale-diesel .direccion {
+                font-size: 9pt;
+            }
+
+            .vale-diesel .direccion .numero {
+                font-size: 15pt;
+            }
+
+            .vale-diesel .hora {
+                right: 5mm;
+                bottom: 3mm;
+                font-size: 8pt;
+            }
+
+            .vale-diesel .titulo {
+                flex: 0 0 auto;
+                padding: 2.5mm 4mm;
+                font-size: 15pt;
+            }
+
+            .vale-diesel .diesel-contenido {
+                display: flex;
+                flex: 1 1 auto;
+                flex-direction: column;
+                justify-content: space-around;
+                min-height: 0;
+                padding: 3mm 9mm 0;
+                font-size: 10pt;
+            }
+
+            .vale-diesel .diesel-fila {
+                min-height: 7mm;
+                margin: 0;
+            }
+
+            .vale-diesel .diesel-detalle-linea {
+                min-height: 14mm;
+                line-height: 7mm;
+                background-size: 100% 7mm;
+            }
+
+            .vale-diesel .diesel-vehiculo {
+                gap: 3mm;
+                font-size: 8.5pt;
+            }
+
+            .vale-diesel .diesel-fecha {
+                margin-top: 0;
+            }
+
+            .vale-diesel .firmas-diesel {
+                flex: 0 0 29mm;
+                padding: 3mm 9mm 5mm;
+                gap: 7mm;
+            }
+
+            .vale-diesel .firmas-diesel .firma {
+                min-height: 19mm;
+            }
+
+            .vale-diesel .firmas-diesel .firma-titulo {
+                font-size: 9pt;
+            }
+
+            .vale-diesel .firmas-diesel .firma-subtitulo {
+                font-size: 7.5pt;
+            }
+
+            .vale-diesel .firmas-diesel .firma-linea {
+                margin-bottom: 2mm;
             }
 
             .titulo {
@@ -327,7 +660,7 @@
          VALE
     ===================================================== --}}
 
-    <main class="vale">
+    <main class="vale {{ $esDiesel ? 'vale-diesel' : '' }}" data-print-format="{{ $esDiesel ? 'gams-diesel' : 'standard' }}">
 
         {{-- =================================================
              ENCABEZADO
@@ -353,9 +686,11 @@
                 SECRETARÍA MUNICIPAL<br>
                 DE FINANZAS Y ADMINISTRACIÓN
 
-                <div class="numero">
-                    N.º {{ $valeCombustible->numero_vale }}
-                </div>
+                @unless($esDiesel)
+                    <div class="numero">
+                        N.º {{ $numeroValeFormateado }}
+                    </div>
+                @endunless
 
             </div>
 
@@ -365,8 +700,14 @@
 
                 DIRECCIÓN ADMINISTRATIVA
 
+                @if($esDiesel)
+                    <div class="numero">
+                        N.º {{ $numeroValeFormateado }}
+                    </div>
+                @endif
+
                 <div class="hora">
-                    Hora: __________________
+                    Hora: {{ $valeCombustible->created_at?->format('H:i') ?? '—' }}
                 </div>
 
             </div>
@@ -380,16 +721,20 @@
 
         <div class="titulo">
 
-            VALE DE COMBUSTIBLE
-
-            @if($valeCombustible->tipoCombustible?->nombre)
-
-                ({{ strtoupper($valeCombustible->tipoCombustible->nombre) }})
-
+            @if($esDiesel)
+                VALE DE COMBUSTIBLE (DIESEL OIL)
             @else
+                VALE DE COMBUSTIBLE
 
-                (________________)
+                @if($valeCombustible->tipoCombustible?->nombre)
 
+                    ({{ strtoupper($valeCombustible->tipoCombustible->nombre) }})
+
+                @else
+
+                    (________________)
+
+                @endif
             @endif
 
         </div>
@@ -399,7 +744,51 @@
              DATOS DEL VALE
         ================================================= --}}
 
-        <div class="contenido">
+             @if($esDiesel)
+
+                 <div class="contenido diesel-contenido">
+
+<div class="diesel-fila">
+    <span class="diesel-etiqueta">Lugar de entrega:</span>
+    <span class="diesel-linea">{{ $valeCombustible->lugarEntrega?->nombre ?? '' }}</span>
+</div>
+
+                     <div class="diesel-fila diesel-cantidad">
+                         <span class="diesel-etiqueta">Cantidad:</span>
+                         <span class="diesel-linea">{{ $valeCombustible->cantidad_litros ?? '' }}</span>
+                         <span>Lts.</span>
+                     </div>
+
+                     <div class="diesel-fila diesel-detalle">
+                         <span class="diesel-etiqueta">Detalle:</span>
+                         <div class="diesel-detalle-linea">{{ $valeCombustible->detalle_asignacion ?? '' }}</div>
+                     </div>
+
+                     <div class="diesel-fila diesel-vehiculo">
+                         <div class="diesel-grupo">
+                             <span class="diesel-etiqueta">Nro. de Placa:</span>
+                             <span class="diesel-linea">{{ $valeCombustible->vehiculo?->placa ?? '' }}</span>
+                         </div>
+                         <div class="diesel-grupo">
+                             <span class="diesel-etiqueta">Código de vehículo:</span>
+                             <span class="diesel-linea">{{ $valeCombustible->vehiculo?->codigo ?? '' }}</span>
+                         </div>
+                         <div class="diesel-grupo">
+                             <span class="diesel-etiqueta">Kilometraje/Horómetro:</span>
+                             <span class="diesel-linea">{{ $valeCombustible->kilometraje ?? '' }}</span>
+                         </div>
+                     </div>
+
+                     <div class="diesel-fila diesel-fecha">
+                         <span class="diesel-etiqueta">Sacaba:</span>
+                         <span class="diesel-linea">{{ $valeCombustible->fecha ? \Illuminate\Support\Carbon::parse($valeCombustible->fecha)->translatedFormat('d \d\e F \d\e Y') : '' }}</span>
+                     </div>
+
+                 </div>
+
+             @else
+
+             <div class="contenido">
 
             {{-- ESTACIÓN DE SERVICIO --}}
             <div class="fila">
@@ -477,28 +866,7 @@
                     </span>
 
                     <span class="linea">
-
-                        @php
-                            $tipoVehiculo = mb_strtoupper(
-                                trim($valeCombustible->vehiculo?->tipo ?? '')
-                            );
-
-                            $unidadVehiculo = mb_strtoupper(
-                                trim($valeCombustible->vehiculo?->unidad?->nombre ?? '')
-                            );
-
-                            $detalle = 'ASIGNADO A';
-
-                            if ($tipoVehiculo !== '') {
-                                $detalle .= ' ' . $tipoVehiculo;
-                            }
-
-                            if ($unidadVehiculo !== '') {
-                                $detalle .= ' DE ' . $unidadVehiculo;
-                            }
-                        @endphp
-
-                        {{ $detalle }}
+                        {{ $valeCombustible->detalle_asignacion ?? '' }}
 
                     </span>
 
@@ -551,7 +919,7 @@
             </div>
 
 
-            {{-- FECHA --}}
+            {{-- FECHA DEL VALE: elegida al emitir; hora de emisión: created_at --}}
             <div class="fila fecha">
 
                 <div class="fecha-texto">
@@ -599,10 +967,41 @@
 
         </div>
 
+        @endif
+
 
         {{-- =================================================
              FIRMAS
         ================================================= --}}
+
+        @if($esDiesel)
+
+            <div class="firmas firmas-diesel">
+
+                <div class="firma">
+                    <div class="firma-linea"></div>
+                    <div class="firma-titulo">Recibí conforme</div>
+                    <div class="firma-subtitulo">CONDUCTOR</div>
+                </div>
+
+                <div class="firma">
+                    <div class="firma-linea"></div>
+                    <div class="firma-titulo">Autorizado por:</div>
+                    <div class="firma-subtitulo">
+                        TEC. I ADMINISTRACIÓN DE<br>
+                        COMBUSTIBLES Y LUBRICANTES
+                    </div>
+                </div>
+
+                <div class="firma">
+                    <div class="firma-linea"></div>
+                    <div class="firma-titulo">Autorizado por:</div>
+                    <div class="firma-subtitulo">DIRECTOR ADMINISTRATIVO</div>
+                </div>
+
+            </div>
+
+        @else
 
         <div class="firmas">
 
@@ -667,6 +1066,8 @@
             </div>
 
         </div>
+
+        @endif
 
     </main>
 

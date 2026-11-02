@@ -236,6 +236,7 @@
 
 <a href="{{ route('vehiculos.index') }}"
    class="btn btn-secondary">
+    <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
     Cancelar
 </a>
 

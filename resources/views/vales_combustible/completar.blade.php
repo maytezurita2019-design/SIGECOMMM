@@ -4,13 +4,18 @@
 
 @section('content')
 
+@php
+    $nombreTipoActual = mb_strtoupper((string) ($valeCombustible->tipoCombustible?->nombre ?? ''), 'UTF-8');
+    $tipoActualDiesel = str_contains($nombreTipoActual, 'DIESEL') || str_contains($nombreTipoActual, 'DIÉSEL');
+@endphp
+
 <div class="d-flex justify-content-between align-items-center mb-4">
 
     <div>
 
         <h2>
             Completar vale N.º
-            {{ sprintf('%06d', (int) $valeCombustible->numero_vale) }}
+            {{ $valeCombustible->numero_vale_formateado }}
         </h2>
 
         <p class="text-muted mb-0">
@@ -23,6 +28,7 @@
         href="{{ route('vales-combustible.show', $valeCombustible) }}"
         class="btn btn-secondary"
     >
+        <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>
         Volver
     </a>
 
@@ -51,10 +57,7 @@
                     <strong>N.º de vale</strong>
 
                     <div>
-                        {{ sprintf(
-                            '%06d',
-                            (int) $valeCombustible->numero_vale
-                        ) }}
+                        {{ $valeCombustible->numero_vale_formateado }}
                     </div>
 
                 </div>
@@ -220,14 +223,20 @@
             for="tipo_combustible_id"
             class="form-label"
         >
-            Tipo de combustible *
+            Tipo de combustible
+            @if($valeCombustible->tipo_combustible_id === null)
+                *
+            @endif
         </label>
 
         <select
             id="tipo_combustible_id"
             name="tipo_combustible_id"
             class="form-select @error('tipo_combustible_id') is-invalid @enderror"
-            required
+            @disabled($valeCombustible->tipo_combustible_id !== null)
+            @if($valeCombustible->tipo_combustible_id === null)
+                required
+            @endif
         >
             <option value="">
                 Seleccione combustible...
@@ -236,7 +245,11 @@
             @foreach($tiposCombustible as $tipo)
                 <option
                     value="{{ $tipo->id }}"
-                    @selected(old('tipo_combustible_id') == $tipo->id)
+                    data-ubicacion="{{ str_contains(mb_strtoupper($tipo->nombre, 'UTF-8'), 'DIESEL') || str_contains(mb_strtoupper($tipo->nombre, 'UTF-8'), 'DIÉSEL') ? 'diesel' : 'gasolina' }}"
+                    @selected(
+                        ($valeCombustible->tipo_combustible_id ?? old('tipo_combustible_id'))
+                            == $tipo->id
+                    )
                 >
                     {{ $tipo->nombre }}
                 </option>
@@ -253,21 +266,21 @@
     </div>
 
 
-    {{-- ESTACIÓN DE SERVICIO --}}
-    <div class="col-md-6 mb-3">
+    {{-- UBICACIÓN DEL COMBUSTIBLE --}}
+    <div class="col-md-6 mb-3 {{ $tipoActualDiesel ? 'd-none' : '' }}" id="estacionServicioContainer">
 
         <label
             for="estacion_servicio_id"
             class="form-label"
         >
-            Estación de servicio *
+            Estación de servicio
         </label>
 
         <select
             id="estacion_servicio_id"
             name="estacion_servicio_id"
             class="form-select @error('estacion_servicio_id') is-invalid @enderror"
-            required
+            @disabled($tipoActualDiesel || $valeCombustible->estacion_servicio_id !== null)
         >
             <option value="">
                 Seleccione estación...
@@ -276,7 +289,10 @@
             @foreach($estacionesServicio as $estacion)
                 <option
                     value="{{ $estacion->id }}"
-                    @selected(old('estacion_servicio_id') == $estacion->id)
+                    @selected(
+                        ($valeCombustible->estacion_servicio_id ?? old('estacion_servicio_id'))
+                            == $estacion->id
+                    )
                 >
                     {{ $estacion->nombre }}
                 </option>
@@ -290,6 +306,27 @@
             </div>
         @enderror
 
+    </div>
+
+    <div class="col-md-6 mb-3 {{ $tipoActualDiesel ? '' : 'd-none' }}" id="lugarEntregaContainer">
+        <label for="lugar_entrega_id" class="form-label">Lugar de entrega</label>
+        <select
+            id="lugar_entrega_id"
+            name="lugar_entrega_id"
+            class="form-select @error('lugar_entrega_id') is-invalid @enderror"
+            @disabled(!$tipoActualDiesel || $valeCombustible->lugar_entrega_id !== null)
+        >
+            <option value="">Seleccione lugar de entrega...</option>
+            @foreach($lugaresEntrega as $lugar)
+                <option value="{{ $lugar->id }}"
+                    @disabled(!$lugar->estado)
+                    @selected(old('lugar_entrega_id', $valeCombustible->lugar_entrega_id) == $lugar->id)>
+                    {{ $lugar->nombre }}{{ $lugar->estado ? '' : ' (Inactivo)' }}
+                </option>
+            @endforeach
+        </select>
+        <div class="form-text">Los vales históricos sin lugar asignado se mantienen sin cambios si no selecciona uno.</div>
+        @error('lugar_entrega_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
     </div>
 
 </div>
@@ -444,6 +481,7 @@
                 ) }}"
                 class="btn btn-outline-secondary"
             >
+                <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
                 Cancelar
             </a>
 
@@ -455,5 +493,30 @@
 
 
 <script src="{{ asset('js/total-vale.js') }}"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const tipo = document.getElementById('tipo_combustible_id');
+    const estacion = document.getElementById('estacion_servicio_id');
+    const lugar = document.getElementById('lugar_entrega_id');
+    const estaciones = document.getElementById('estacionServicioContainer');
+    const lugares = document.getElementById('lugarEntregaContainer');
+
+    function actualizarUbicacion() {
+        const diesel = tipo?.selectedOptions[0]?.dataset.ubicacion === 'diesel';
+        estaciones?.classList.toggle('d-none', diesel);
+        lugares?.classList.toggle('d-none', !diesel);
+        if (estacion && !{{ $valeCombustible->estacion_servicio_id !== null ? 'true' : 'false' }}) {
+            estacion.disabled = diesel;
+        }
+        if (lugar && !{{ $valeCombustible->lugar_entrega_id !== null ? 'true' : 'false' }}) {
+            lugar.disabled = !diesel;
+        }
+    }
+
+    tipo?.addEventListener('change', actualizarUbicacion);
+    actualizarUbicacion();
+});
+</script>
 
 @endsection

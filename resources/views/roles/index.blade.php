@@ -207,7 +207,8 @@
                                 <a
                                     href="{{ route('roles.show', $rol) }}"
                                     class="btn btn-sm btn-info text-white"
-                                    title="Ver">
+                                    title="Ver"
+                                    aria-label="Ver rol">
 
                                     <i class="bi bi-eye"></i>
 
@@ -217,7 +218,8 @@
                                 <a
                                     href="{{ route('roles.edit', $rol) }}"
                                     class="btn btn-sm btn-warning"
-                                    title="Editar">
+                                    title="Editar"
+                                    aria-label="Editar rol">
 
                                     <i class="bi bi-pencil"></i>
 

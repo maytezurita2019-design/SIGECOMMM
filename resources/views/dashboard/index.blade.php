@@ -626,6 +626,7 @@
             href="{{ route('vales-combustible.index') }}"
             class="btn btn-sm btn-outline-success"
         >
+            <i class="bi bi-list-ul me-1" aria-hidden="true"></i>
             Ver todos
 
             <i class="bi bi-arrow-right ms-1"></i>
@@ -676,7 +677,7 @@
                             <td>
 
                                 <strong class="vale-number">
-                                    {{ $vale->numero_vale }}
+                                    {{ sprintf('%06d', (int) $vale->numero_vale) }}
                                 </strong>
 
                             </td>
@@ -745,8 +746,9 @@
                                     ) }}"
                                     class="btn btn-sm btn-light border"
                                     title="Ver vale"
+                                    aria-label="Ver vale"
                                 >
-                                    <i class="bi bi-eye"></i>
+                                    <i class="bi bi-eye" aria-hidden="true"></i>
                                 </a>
 
                             </td>

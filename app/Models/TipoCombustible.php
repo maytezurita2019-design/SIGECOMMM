@@ -23,4 +23,9 @@ class TipoCombustible extends Model
     {
         return $this->hasMany(LoteVale::class, 'tipo_combustible_id');
     }
+
+    public function preciosCombustible(): HasMany
+    {
+        return $this->hasMany(PrecioCombustible::class, 'tipo_combustible_id');
+    }
 }

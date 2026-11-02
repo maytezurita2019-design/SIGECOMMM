@@ -17,6 +17,7 @@ class Vehiculo extends Model
         'industria',
         'marca',
         'color',
+        'detalle_asignacion_predeterminado',
         'unidad_id',
         'apertura_programatica_id',
         'estado',

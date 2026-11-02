@@ -201,7 +201,8 @@
                                 <a
                                     href="{{ route('tipos-combustible.show', $tipoCombustible) }}"
                                     class="btn btn-sm btn-info text-white"
-                                    title="Ver">
+                                    title="Ver"
+                                    aria-label="Ver tipo de combustible">
 
                                     <i class="bi bi-eye"></i>
 
@@ -211,7 +212,8 @@
                                 <a
                                     href="{{ route('tipos-combustible.edit', $tipoCombustible) }}"
                                     class="btn btn-sm btn-warning"
-                                    title="Editar">
+                                    title="Editar"
+                                    aria-label="Editar tipo de combustible">
 
                                     <i class="bi bi-pencil"></i>
 
@@ -231,6 +233,7 @@
                                         type="submit"
                                         class="btn btn-sm btn-danger"
                                         title="Eliminar"
+                                        aria-label="Eliminar tipo de combustible"
                                         onclick="return confirm('¿Eliminar este tipo de combustible?')">
 
                                         <i class="bi bi-trash"></i>

@@ -25,13 +25,16 @@ class PeriodoController extends Controller
 
     public function store(Request $request)
     {
+        // Obtener automáticamente el año actual.
+        $anioActual = now()->year;
+
         $datos = $request->validate([
-            'anio' => 'required|integer|min:2000|max:2100',
+            'anio' => 'required|integer|min:2000|max:' . $anioActual,
         ], [
             'anio.required' => 'El año de la gestión es obligatorio.',
             'anio.integer' => 'El año debe ser un número válido.',
             'anio.min' => 'El año no puede ser menor a 2000.',
-            'anio.max' => 'El año no puede ser mayor a 2100.',
+            'anio.max' => 'No se pueden registrar períodos de años futuros. La gestión actual es ' . $anioActual . '.',
         ]);
 
         $anio = $datos['anio'];
@@ -41,7 +44,7 @@ class PeriodoController extends Controller
         if ($existe) {
             return back()
                 ->withErrors([
-                    'anio' => 'Ya existen períodos registrados para la gestión '.$anio.'.',
+                    'anio' => 'Ya existen períodos registrados para la gestión ' . $anio . '.',
                 ])
                 ->withInput();
         }
@@ -66,7 +69,7 @@ class PeriodoController extends Controller
         return redirect()->route('periodos.index')
             ->with(
                 'success',
-                'Los 12 períodos de la gestión '.$anio.' fueron registrados correctamente.'
+                'Los 12 períodos de la gestión ' . $anio . ' fueron registrados correctamente.'
             );
     }
 
@@ -82,12 +85,20 @@ class PeriodoController extends Controller
 
     public function update(Request $request, Periodo $periodo)
     {
+        // El año máximo permitido cambia automáticamente.
+        $anioActual = now()->year;
+
         $datos = $request->validate([
             'mes' => 'required|integer|min:1|max:12',
-            'anio' => 'required|integer|min:2000|max:2100',
+            'anio' => 'required|integer|min:2000|max:' . $anioActual,
             'fecha_inicio' => 'required|date',
             'fecha_fin' => 'required|date|after_or_equal:fecha_inicio',
             'estado' => 'required|boolean',
+        ], [
+            'anio.required' => 'El año de la gestión es obligatorio.',
+            'anio.integer' => 'El año debe ser un número válido.',
+            'anio.min' => 'El año no puede ser menor a 2000.',
+            'anio.max' => 'No se pueden registrar períodos de años futuros. La gestión actual es ' . $anioActual . '.',
         ]);
 
         $existe = Periodo::where('mes', $datos['mes'])
@@ -98,7 +109,7 @@ class PeriodoController extends Controller
         if ($existe) {
             return back()
                 ->withErrors([
-                    'mes' => 'Ya existe un periodo para ese mes y año.',
+                    'mes' => 'Ya existe un período para ese mes y año.',
                 ])
                 ->withInput();
         }
@@ -106,7 +117,7 @@ class PeriodoController extends Controller
         $periodo->update($datos);
 
         return redirect()->route('periodos.index')
-            ->with('success', 'Periodo actualizado correctamente.');
+            ->with('success', 'Período actualizado correctamente.');
     }
 
     public function destroy(Periodo $periodo)
@@ -122,6 +133,6 @@ class PeriodoController extends Controller
         $periodo->delete();
 
         return redirect()->route('periodos.index')
-            ->with('success', 'Periodo eliminado correctamente.');
+            ->with('success', 'Período eliminado correctamente.');
     }
 }

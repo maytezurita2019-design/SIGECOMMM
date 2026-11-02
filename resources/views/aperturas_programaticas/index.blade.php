@@ -239,7 +239,8 @@
                                 <a
                                     href="{{ route('aperturas-programaticas.show', $aperturaProgramatica) }}"
                                     class="btn btn-sm btn-info text-white"
-                                    title="Ver">
+                                    title="Ver"
+                                    aria-label="Ver apertura programática">
 
                                     <i class="bi bi-eye"></i>
 
@@ -249,7 +250,8 @@
                                 <a
                                     href="{{ route('aperturas-programaticas.edit', $aperturaProgramatica) }}"
                                     class="btn btn-sm btn-warning"
-                                    title="Editar">
+                                    title="Editar"
+                                    aria-label="Editar apertura programática">
 
                                     <i class="bi bi-pencil"></i>
 

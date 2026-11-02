@@ -215,7 +215,8 @@
                                 {{-- VER --}}
                                 <a href="{{ route('usuarios.show', $usuario) }}"
                                    class="btn btn-sm btn-info text-white"
-                                   title="Ver usuario">
+                                   title="Ver usuario"
+                                   aria-label="Ver usuario">
 
                                     <i class="bi bi-eye"></i>
 
@@ -224,7 +225,8 @@
                                 {{-- EDITAR --}}
                                 <a href="{{ route('usuarios.edit', $usuario) }}"
                                    class="btn btn-sm btn-warning"
-                                   title="Editar usuario">
+                                   title="Editar usuario"
+                                   aria-label="Editar usuario">
 
                                     <i class="bi bi-pencil"></i>
 
@@ -242,7 +244,8 @@
 
         <button type="submit"
                 class="btn btn-sm btn-danger"
-                title="Eliminar usuario">
+                title="Eliminar usuario"
+                aria-label="Eliminar usuario">
 
             <i class="bi bi-trash"></i>
 

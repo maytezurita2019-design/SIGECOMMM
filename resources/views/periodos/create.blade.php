@@ -1,3 +1,4 @@
+
 @extends('layouts.app')
 
 @section('title', 'Nueva gestión')
@@ -35,16 +36,17 @@
                         name="anio"
                         id="anio"
                         class="form-control"
-                        value="{{ old('anio') }}"
+                        value="{{ old('anio', now()->year) }}"
                         min="2000"
-                        max="2100"
-                        placeholder="Ejemplo: 2027"
+                        max="{{ now()->year }}"
+                        placeholder="Ejemplo: {{ now()->year }}"
                         required
                     >
 
                     <div class="form-text">
                         Se generarán automáticamente los 12 períodos
-                        de enero a diciembre.
+                        de enero a diciembre de la gestión seleccionada.
+                        No se permite registrar años futuros.
                     </div>
 
                 </div>
@@ -52,11 +54,13 @@
             </div>
 
             <button type="submit" class="btn btn-primary">
+                <i class="bi bi-calendar-plus me-1" aria-hidden="true"></i>
                 Generar períodos
             </button>
 
             <a href="{{ route('periodos.index') }}"
                class="btn btn-secondary">
+                <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
                 Cancelar
             </a>
 

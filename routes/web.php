@@ -12,6 +12,7 @@ use App\Http\Controllers\OrganismoFinanciadorController;
 use App\Http\Controllers\AperturaProgramaticaController;
 use App\Http\Controllers\VehiculoController;
 use App\Http\Controllers\EstacionServicioController;
+use App\Http\Controllers\LugarEntregaController;
 use App\Http\Controllers\LoteValeController;
 use App\Http\Controllers\ValeCombustibleController;
 use App\Http\Controllers\AutenticacionController;
@@ -21,6 +22,8 @@ use App\Http\Controllers\SolicitudContrasenaController;
 use App\Http\Controllers\ReporteController;
 use App\Http\Controllers\AuditoriaController;
 use App\Http\Controllers\ParteDiarioController;
+use App\Http\Controllers\PrecioCombustibleController;
+use App\Http\Controllers\ReportePoliciaVehiculoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -49,15 +52,6 @@ Route::post('/login', [AutenticacionController::class, 'login'])
 // Cerrar sesión
 Route::post('/logout', [AutenticacionController::class, 'logout'])
     ->name('logout');
-
-    Route::get('/partes-diarios', [ParteDiarioController::class, 'index'])
-    ->name('partes-diarios.index');
-
-Route::post('/partes-diarios', [ParteDiarioController::class, 'store'])
-    ->name('partes-diarios.store');
-
-Route::put('/partes-diarios/{parteDiario}', [ParteDiarioController::class, 'update'])
-    ->name('partes-diarios.update');
 
 
 /*
@@ -98,6 +92,15 @@ Route::post(
 */
 
 Route::middleware('auth')->group(function () {
+
+    // Partes diarios: acceso solo para los técnicos autenticados.
+    Route::get('/partes-diarios', [ParteDiarioController::class, 'index'])
+        ->middleware('rol:TECNICO_I,TECNICO_II')->name('partes-diarios.index');
+    Route::post('/partes-diarios', [ParteDiarioController::class, 'store'])
+        ->middleware('rol:TECNICO_I,TECNICO_II')->name('partes-diarios.store');
+    Route::put('/partes-diarios/{parteDiario}', [ParteDiarioController::class, 'update'])
+        ->middleware('rol:TECNICO_I,TECNICO_II')->name('partes-diarios.update');
+
         /*
     |--------------------------------------------------------------------------
     | dashboard
@@ -148,11 +151,11 @@ Route::middleware('auth')->group(function () {
 
     // IMPORTANTE: las rutas /create deben registrarse antes que /{vehiculo}.
     // PostgreSQL intenta convertir "create" a BIGINT si la ruta show queda primero.
-    Route::resource('vehiculos', VehiculoController::class)->only(['create','store','edit','update','destroy'])->middleware('rol:Administrador,ADMINISTRADOR')->parameters(['vehiculos'=>'vehiculo']);
-    Route::resource('vehiculos', VehiculoController::class)->only(['index','show'])->parameters(['vehiculos'=>'vehiculo']);
+    Route::resource('vehiculos', VehiculoController::class)->only(['create','store','edit','update'])->middleware('rol:TECNICO_I,TECNICO_II')->parameters(['vehiculos'=>'vehiculo']);
+    Route::resource('vehiculos', VehiculoController::class)->only(['index','show'])->middleware('rol:TECNICO_I,TECNICO_II')->parameters(['vehiculos'=>'vehiculo']);
 
-    Route::resource('unidades', UnidadController::class)->only(['create','store','edit','update','destroy'])->middleware('rol:Administrador,ADMINISTRADOR')->parameters(['unidades'=>'unidad']);
-    Route::resource('unidades', UnidadController::class)->only(['index','show'])->parameters(['unidades'=>'unidad']);
+    Route::resource('unidades', UnidadController::class)->only(['create','store','edit','update'])->middleware('rol:TECNICO_I')->parameters(['unidades'=>'unidad']);
+    Route::resource('unidades', UnidadController::class)->only(['index','show'])->middleware('rol:TECNICO_I,TECNICO_II')->parameters(['unidades'=>'unidad']);
 
 
     /*
@@ -161,27 +164,49 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::get('entregas-policia/{entregaPolicia}/imprimir', [\App\Http\Controllers\EntregaPoliciaController::class, 'imprimir'])->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')->name('entregas-policia.imprimir');
-    Route::post('vales-combustible/{valeCombustible}/cerrar-entrega', [\App\Http\Controllers\EntregaPoliciaController::class, 'cerrar'])->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')->name('entregas-policia.cerrar');
-    Route::resource('entregas-policia', \App\Http\Controllers\EntregaPoliciaController::class)->only(['index', 'create', 'store', 'show'])->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')->parameters(['entregas-policia' => 'entregaPolicia']);
+    Route::get('entregas-policia/{entregaPolicia}/imprimir', [\App\Http\Controllers\EntregaPoliciaController::class, 'imprimir'])->middleware('rol:TECNICO_I,TECNICO_II')->name('entregas-policia.imprimir');
+    Route::post('vales-combustible/{valeCombustible}/cerrar-entrega', [\App\Http\Controllers\EntregaPoliciaController::class, 'cerrar'])->middleware('rol:TECNICO_I,TECNICO_II')->name('entregas-policia.cerrar');
+    Route::resource('entregas-policia', \App\Http\Controllers\EntregaPoliciaController::class)->only(['index', 'create', 'store', 'show'])->middleware('rol:TECNICO_I,TECNICO_II')->parameters(['entregas-policia' => 'entregaPolicia']);
 
-    Route::resource('lotes-vales', LoteValeController::class)->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')->parameters(['lotes-vales'=>'loteVale']);
+    Route::delete('lotes-vales/{loteVale}', [LoteValeController::class, 'destroy'])
+        ->middleware('rol:TECNICO_I')
+        ->name('lotes-vales.destroy');
 
-    Route::get('/vales-combustible/{valeCombustible}/imprimir', [ValeCombustibleController::class, 'imprimir'])->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')
+    Route::resource('lotes-vales', LoteValeController::class)->except(['destroy'])->middleware('rol:TECNICO_I')->parameters(['lotes-vales'=>'loteVale']);
+
+    Route::get('/series-correlativas', [\App\Http\Controllers\SerieCorrelativaController::class, 'index'])
+        ->middleware('rol:Administrador,ADMINISTRADOR,TECNICO_I,TECNICO_II')
+        ->name('series-correlativas.index');
+    Route::post('/series-correlativas/iniciar-anio', [\App\Http\Controllers\SerieCorrelativaController::class, 'iniciarAnio'])
+        ->middleware('rol:TECNICO_I')
+        ->name('series-correlativas.iniciar-anio');
+    Route::post('/series-correlativas/{codigo}/activar', [\App\Http\Controllers\SerieCorrelativaController::class, 'activar'])
+        ->where('codigo', 'POL-GAS|GAMS-GAS|GAMS-DIE')
+        ->middleware('rol:TECNICO_I')
+        ->name('series-correlativas.activar');
+    Route::post('/series-correlativas/{codigo}', [\App\Http\Controllers\SerieCorrelativaController::class, 'configurar'])
+        ->where('codigo', 'POL-GAS|GAMS-GAS|GAMS-DIE')
+        ->middleware('rol:TECNICO_I')
+        ->name('series-correlativas.update');
+
+    Route::get('/vales-combustible/{valeCombustible}/imprimir', [ValeCombustibleController::class, 'imprimir'])->middleware('rol:ADMINISTRADOR,TECNICO_I,TECNICO_II')
         ->name('vales-combustible.imprimir');
+    Route::get('/vales-combustible/series/siguiente', [ValeCombustibleController::class, 'previsualizarSerie'])
+        ->middleware('rol:TECNICO_I,TECNICO_II')
+        ->name('vales-combustible.series.siguiente');
 
     // Registrar primero /create para evitar que el binding de {valeCombustible}
     // interprete literalmente "create" como un id BIGINT en PostgreSQL.
-    Route::resource('vales-combustible', ValeCombustibleController::class)->only(['create','store','edit','update','destroy'])->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')->parameters(['vales-combustible' => 'valeCombustible']);
-    Route::resource('vales-combustible', ValeCombustibleController::class)->only(['index','show'])->parameters(['vales-combustible' => 'valeCombustible']);
+    Route::resource('vales-combustible', ValeCombustibleController::class)->only(['create','store','edit','update'])->middleware('rol:TECNICO_I,TECNICO_II')->parameters(['vales-combustible' => 'valeCombustible']);
+    Route::resource('vales-combustible', ValeCombustibleController::class)->only(['index','show'])->middleware('rol:ADMINISTRADOR,TECNICO_I,TECNICO_II')->parameters(['vales-combustible' => 'valeCombustible']);
     Route::get('/vales-combustible/{valeCombustible}/completar', [ValeCombustibleController::class, 'completarFormulario'])
-        ->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')
+        ->middleware('rol:TECNICO_I,TECNICO_II')
         ->name('vales-combustible.completar.formulario');
     Route::post('/vales-combustible/{valeCombustible}/completar', [ValeCombustibleController::class, 'completar'])
-        ->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')
+        ->middleware('rol:TECNICO_I,TECNICO_II')
         ->name('vales-combustible.completar');
     Route::post('/vales-combustible/{valeCombustible}/anular', [ValeCombustibleController::class, 'anular'])
-        ->middleware('rol:Administrador,ADMINISTRADOR,Auxiliar,AUXILIAR')
+        ->middleware('rol:TECNICO_I,TECNICO_II')
         ->name('vales-combustible.anular');
 
 
@@ -191,15 +216,36 @@ Route::middleware('auth')->group(function () {
     |--------------------------------------------------------------------------
     */
 
-    Route::resource('periodos', PeriodoController::class)->middleware('rol:Administrador,ADMINISTRADOR')
+    Route::resource('periodos', PeriodoController::class)->middleware('rol:TECNICO_I')
         ->parameters(['periodos' => 'periodo']);
 
-    Route::resource('tipos-combustible', TipoCombustibleController::class)->middleware('rol:Administrador,ADMINISTRADOR')
+    Route::resource('tipos-combustible', TipoCombustibleController::class)->middleware('rol:TECNICO_I')
         ->parameters(['tipos-combustible' => 'tipoCombustible']);
 
+    Route::resource('precios-combustible', PrecioCombustibleController::class)
+        ->middleware('rol:TECNICO_I')
+        ->only(['index', 'store'])
+        ->parameters(['precios-combustible' => 'precioCombustible']);
+
     Route::resource('estaciones-servicio', EstacionServicioController::class)
-    ->middleware('rol:Administrador,ADMINISTRADOR')->except(['destroy'])
+    ->middleware('rol:TECNICO_I')->except(['destroy'])
     ->parameters(['estaciones-servicio' => 'estacionServicio']);
+
+    Route::get('/lugares-entrega', [LugarEntregaController::class, 'index'])
+        ->middleware('rol:ADMINISTRADOR,TECNICO_I,TECNICO_II')
+        ->name('lugares-entrega.index');
+    Route::post('/lugares-entrega', [LugarEntregaController::class, 'store'])
+        ->middleware('rol:TECNICO_I')
+        ->name('lugares-entrega.store');
+    Route::put('/lugares-entrega/{lugarEntrega}', [LugarEntregaController::class, 'update'])
+        ->middleware('rol:TECNICO_I')
+        ->name('lugares-entrega.update');
+    Route::patch('/lugares-entrega/{lugarEntrega}/desactivar', [LugarEntregaController::class, 'desactivar'])
+        ->middleware('rol:TECNICO_I')
+        ->name('lugares-entrega.desactivar');
+    Route::patch('/lugares-entrega/{lugarEntrega}/reactivar', [LugarEntregaController::class, 'reactivar'])
+        ->middleware('rol:TECNICO_I')
+        ->name('lugares-entrega.reactivar');
 
 
     /*
@@ -211,17 +257,17 @@ Route::middleware('auth')->group(function () {
     Route::resource(
     'aperturas-programaticas',
     AperturaProgramaticaController::class
-)->middleware('rol:Administrador,ADMINISTRADOR')->except(['destroy'])
+)->middleware('rol:TECNICO_I')->except(['destroy'])
   ->parameters([
       'aperturas-programaticas' => 'aperturaProgramatica'
   ]);
 
 Route::resource('fuentes-financiamiento', FuenteFinanciamientoController::class)
-    ->middleware('rol:Administrador,ADMINISTRADOR')->except(['destroy'])
+    ->middleware('rol:TECNICO_I')->except(['destroy'])
     ->parameters(['fuentes-financiamiento' => 'fuenteFinanciamiento']);
 
     Route::resource('organismos-financiadores', OrganismoFinanciadorController::class)
-    ->middleware('rol:Administrador,ADMINISTRADOR')->except(['destroy'])
+    ->middleware('rol:TECNICO_I')->except(['destroy'])
     ->parameters(['organismos-financiadores' => 'organismoFinanciador']);
 
     Route::get(
@@ -229,7 +275,11 @@ Route::resource('fuentes-financiamiento', FuenteFinanciamientoController::class)
     [SolicitudContrasenaController::class, 'index']
 )->middleware('rol:Administrador,ADMINISTRADOR')->name('solicitudes-contrasena.index');
 
-Route::get('/auditoria', [AuditoriaController::class, 'index'])->middleware('rol:Administrador,ADMINISTRADOR')->name('auditoria.index');
+Route::get('/auditoria', [AuditoriaController::class, 'index'])->middleware('rol:ADMINISTRADOR,TECNICO_I')->name('auditoria.index');
+
+    // Todos los reportes, incluidos PDF y Excel, requieren uno de los tres roles.
+    Route::middleware('rol:ADMINISTRADOR,TECNICO_I,TECNICO_II')->group(function () {
+Route::get('/reportes', [ReporteController::class, 'index'])->name('reportes.index');
 
 Route::get('/reportes/consumo/excel', [ReporteController::class, 'consumoExcel'])->name('reportes.consumo.excel');
 Route::get('/reportes/vehiculos/excel', [ReporteController::class, 'vehiculosExcel'])->name('reportes.vehiculos.excel');
@@ -268,5 +318,10 @@ Route::get(
 
 Route::get('/reportes/consumo/pdf', [ReporteController::class, 'consumoPdf'])
     ->name('reportes.consumo.pdf');
+    Route::get('/reportes/policia-vehiculos', [\App\Http\Controllers\ReportePoliciaVehiculoController::class, 'index'])->name('reportes.policia-vehiculos');
+Route::get('/reportes/policia-vehiculos/pdf', [\App\Http\Controllers\ReportePoliciaVehiculoController::class, 'pdf'])->name('reportes.policia-vehiculos.pdf');
+Route::get('/reportes/policia-vehiculos/excel', [\App\Http\Controllers\ReportePoliciaVehiculoController::class, 'excel'])->name('reportes.policia-vehiculos.excel');
+
+    });
 
 });

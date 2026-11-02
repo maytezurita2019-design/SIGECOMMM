@@ -114,15 +114,7 @@
 
                                 $of = $apertura?->organismoFinanciador;
 
-                                $detalle = trim(
-                                    'ASIGNADO A ' .
-                                    mb_strtoupper($vehiculo->tipo ?? '') .
-                                    (
-                                        $vehiculo->unidad?->nombre
-                                            ? ' DE ' . mb_strtoupper($vehiculo->unidad->nombre)
-                                            : ''
-                                    )
-                                );
+                                $detalle = $vehiculo->detalle_asignacion_predeterminado ?? '';
                             @endphp
 
                             <option
@@ -273,6 +265,30 @@
 
                         </div>
 
+                        <div class="mt-3">
+                            <label for="detalle_asignacion" class="form-label">
+                                Detalle *
+                            </label>
+
+                            <textarea
+                                name="detalle_asignacion"
+                                id="detalle_asignacion"
+                                rows="2"
+                                maxlength="1000"
+                                required
+                                class="form-control @error('detalle_asignacion') is-invalid @enderror"
+                                placeholder="SIN DETALLE CONFIGURADO"
+                            >{{ old('detalle_asignacion') }}</textarea>
+
+                            @error('detalle_asignacion')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+
+                            <div class="form-text">
+                                Puede ajustar el detalle para este vale. El cambio no modifica el detalle predeterminado del vehículo.
+                            </div>
+                        </div>
+
 
                         <div id="alertaSinAP"
                              class="alert alert-warning mt-3 mb-0 d-none">
@@ -304,7 +320,7 @@
                             </h2>
 
                             <small class="text-muted">
-                                Registre fecha y kilometraje.
+                                Seleccione combustible, ubicación, fecha y kilometraje.
                             </small>
                         </div>
 
@@ -312,6 +328,73 @@
 
 
                     <div class="row g-3">
+
+                        <div class="d-none">
+                            <label for="tipo_combustible_id" class="form-label">Tipo de combustible *</label>
+                            <select name="tipo_combustible_id" id="tipo_combustible_id"
+                                    class="form-select @error('tipo_combustible_id') is-invalid @enderror" required>
+                                <option value="">Seleccione combustible...</option>
+                                @foreach($tiposCombustible as $tipo)
+                                    <option
+                                        value="{{ $tipo->id }}"
+                                        data-siguiente="{{ $numerosSugeridos[$tipo->id] ?? '' }}"
+                                        data-formateado="{{ $numerosFormateadosSugeridos[$tipo->id] ?? '' }}"
+                                        data-serie="{{ $codigosSerieSugeridos[$tipo->id] ?? '' }}"
+                                        data-estado="{{ $estadosSerieSugeridos[$tipo->id] ?? '' }}"
+                                        data-error="{{ $erroresSugeridos[$codigosSerieSugeridos[$tipo->id] ?? ''] ?? '' }}"
+                                        data-ubicacion="{{ str_contains(mb_strtoupper($tipo->nombre, 'UTF-8'), 'DIESEL') || str_contains(mb_strtoupper($tipo->nombre, 'UTF-8'), 'DIÉSEL') ? 'diesel' : 'gasolina' }}"
+                                        @selected(
+    (string) old('tipo_combustible_id',
+        collect($tiposCombustible)->first(
+            fn ($t) => \App\Models\NumeracionVale::codigoSerie(
+                null, 'GAMS', $t->nombre
+            ) === (
+                ($combustibleSeleccionado ?? null) === 'gasolina'
+                    ? 'GAMS-GAS'
+                    : (
+                        ($combustibleSeleccionado ?? null) === 'diesel'
+                            ? 'GAMS-DIE'
+                            : null
+                    )
+            )
+        )?->id
+    ) === (string) $tipo->id
+)
+                                    >
+                                        {{ $tipo->nombre }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('tipo_combustible_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+
+                        <div class="col-md-6" id="estacionServicioContainer">
+                            <label for="estacion_servicio_id" class="form-label">Estación de servicio *</label>
+                            <select name="estacion_servicio_id" id="estacion_servicio_id"
+                                    class="form-select @error('estacion_servicio_id') is-invalid @enderror">
+                                <option value="">Seleccione estación...</option>
+                                @foreach($estacionesServicio as $estacion)
+                                    <option value="{{ $estacion->id }}" @selected(old('estacion_servicio_id') == $estacion->id)>
+                                        {{ $estacion->nombre }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('estacion_servicio_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
+
+                        <div class="col-md-6 d-none" id="lugarEntregaContainer">
+                            <label for="lugar_entrega_id" class="form-label">Lugar de entrega *</label>
+                            <select name="lugar_entrega_id" id="lugar_entrega_id"
+                                    class="form-select @error('lugar_entrega_id') is-invalid @enderror" disabled>
+                                <option value="">Seleccione lugar de entrega...</option>
+                                @foreach($lugaresEntrega as $lugar)
+                                    <option value="{{ $lugar->id }}" @selected(old('lugar_entrega_id') == $lugar->id)>
+                                        {{ $lugar->nombre }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            @error('lugar_entrega_id')<div class="invalid-feedback">{{ $message }}</div>@enderror
+                        </div>
 
                         <div class="col-md-6">
 
@@ -371,12 +454,14 @@
                 <div class="card-body p-3 p-md-4">
 
                     <div class="small text-muted mb-1">
-                        Próximo vale
+                        Próximo vale · <span id="codigoSerieSugerido">GAMS-GAS</span>
                     </div>
 
-                    <div class="display-6 fw-bold text-success mb-3">
+                    <div id="numeroSiguiente" class="display-6 fw-bold text-success mb-3">
                         N.º {{ $numeroSugerido }}
                     </div>
+
+                    <div id="seriePreviewError" class="alert alert-warning small d-none" role="alert"></div>
 
                     <div class="alert alert-light border small">
 
@@ -412,7 +497,7 @@
 
                     <div class="small">
                         <i class="bi bi-check-circle text-success me-1"></i>
-                        Detalle según vehículo y unidad
+                        Detalle institucional del vehículo
                     </div>
 
 
@@ -448,6 +533,7 @@
                         ) }}"
                            class="btn btn-outline-secondary">
 
+                            <i class="bi bi-x-lg me-1" aria-hidden="true"></i>
                             Cancelar
 
                         </a>
@@ -491,6 +577,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnEmitirImprimir =
         document.getElementById('btnEmitirImprimir');
 
+    const detalleAsignacion =
+        document.getElementById('detalle_asignacion');
+    const tipoCombustible =
+        document.getElementById('tipo_combustible_id');
+    const estacionServicio =
+        document.getElementById('estacion_servicio_id');
+    const lugarEntrega =
+        document.getElementById('lugar_entrega_id');
+    const numeroSiguiente =
+        document.getElementById('numeroSiguiente');
+    const codigoSerieSugerido =
+        document.getElementById('codigoSerieSugerido');
+    const fechaEmision =
+        document.getElementById('fecha');
+    const errorVistaPrevia =
+        document.getElementById('seriePreviewError');
+    const urlVistaPrevia =
+        @json(route('vales-combustible.series.siguiente'));
+    let anioVistaPreviaActual = @json($anio);
+    let consultaVistaPrevia = 0;
+    let consultandoVistaPrevia = false;
+
     const originales =
         select
             ? [...select.options].slice(1)
@@ -508,8 +616,105 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function actualizarNumeroSugerido() {
+        const opcion = tipoCombustible?.selectedOptions[0];
+        const numero = opcion?.dataset.siguiente;
+        const codigo = opcion?.dataset.serie;
+        const formateado = opcion?.dataset.formateado;
+        const estado = opcion?.dataset.estado;
+        const mensaje = opcion?.dataset.error;
 
-    function actualizarVehiculo() {
+        if (numero && codigo && formateado) {
+            numeroSiguiente.textContent = `N.º ${formateado}`;
+            codigoSerieSugerido.textContent = codigo;
+            if (estado !== 'ACTIVA' && mensaje) {
+                errorVistaPrevia.textContent = mensaje;
+                errorVistaPrevia.classList.remove('d-none');
+            } else {
+                errorVistaPrevia?.classList.add('d-none');
+                if (errorVistaPrevia) errorVistaPrevia.textContent = '';
+            }
+        } else {
+            numeroSiguiente.textContent = codigo ? 'No disponible' : 'Seleccione combustible';
+            codigoSerieSugerido.textContent = codigo || 'GAMS';
+            if (codigo && mensaje) {
+                errorVistaPrevia.textContent = mensaje;
+                errorVistaPrevia.classList.remove('d-none');
+            } else {
+                errorVistaPrevia?.classList.add('d-none');
+                if (errorVistaPrevia) errorVistaPrevia.textContent = '';
+            }
+        }
+
+        const serieNoDisponible = Boolean(codigo && (!numero || !formateado || estado !== 'ACTIVA'));
+        if (btnEmitir) btnEmitir.disabled = serieNoDisponible || consultandoVistaPrevia;
+        if (btnEmitirImprimir) btnEmitirImprimir.disabled = serieNoDisponible || consultandoVistaPrevia;
+    }
+
+    async function actualizarVistaPreviaPorAnio() {
+        const anio = Number(fechaEmision?.value?.slice(0, 4));
+        if (!anio || anio === anioVistaPreviaActual) return;
+
+        const consultaActual = ++consultaVistaPrevia;
+        anioVistaPreviaActual = anio;
+        consultandoVistaPrevia = true;
+        errorVistaPrevia.textContent = 'Consultando el correlativo del año seleccionado...';
+        errorVistaPrevia.classList.remove('d-none');
+        actualizarNumeroSugerido();
+
+        try {
+            const respuesta = await fetch(`${urlVistaPrevia}?anio=${encodeURIComponent(anio)}`, {
+                headers: { Accept: 'application/json' },
+            });
+            const datos = await respuesta.json();
+            if (!respuesta.ok) {
+                throw new Error(datos.message || 'No se pudo consultar la serie del año seleccionado.');
+            }
+            if (consultaActual !== consultaVistaPrevia) return;
+
+            tipoCombustible.querySelectorAll('option[data-serie]').forEach((opcion) => {
+                const serie = datos.series?.[opcion.dataset.serie];
+                opcion.dataset.siguiente = serie?.disponible ? String(serie.numero) : '';
+                opcion.dataset.formateado = serie?.disponible ? serie.formateado : '';
+                opcion.dataset.estado = serie?.estado || '';
+                opcion.dataset.error = serie?.mensaje || '';
+            });
+        } catch (error) {
+            if (consultaActual !== consultaVistaPrevia) return;
+            tipoCombustible.querySelectorAll('option[data-serie]').forEach((opcion) => {
+                opcion.dataset.siguiente = '';
+                opcion.dataset.formateado = '';
+                opcion.dataset.estado = '';
+                opcion.dataset.error = error.message;
+            });
+        } finally {
+            if (consultaActual === consultaVistaPrevia) {
+                consultandoVistaPrevia = false;
+                actualizarNumeroSugerido();
+            }
+        }
+    }
+
+    function actualizarUbicacion() {
+        const esDiesel = tipoCombustible?.selectedOptions[0]?.dataset.ubicacion === 'diesel';
+        const estacionContainer = document.getElementById('estacionServicioContainer');
+        const lugarContainer = document.getElementById('lugarEntregaContainer');
+
+        estacionContainer?.classList.remove('d-none');
+        lugarContainer?.classList.toggle('d-none', !esDiesel);
+
+        if (estacionServicio) {
+            estacionServicio.disabled = false;
+            estacionServicio.required = true;
+        }
+        if (lugarEntrega) {
+            lugarEntrega.disabled = !esDiesel;
+            lugarEntrega.required = esDiesel;
+        }
+    }
+
+
+    function actualizarVehiculo(cambiarDetalle = false) {
 
         const opcion =
             select?.selectedOptions[0];
@@ -575,9 +780,13 @@ document.addEventListener('DOMContentLoaded', () => {
             opcion.dataset.of
         );
 
+        if (detalleAsignacion && (cambiarDetalle || !detalleAsignacion.value.trim())) {
+            detalleAsignacion.value = opcion.dataset.detalle || '';
+        }
+
         texto(
             'vdetalle',
-            opcion.dataset.detalle
+            detalleAsignacion?.value || 'SIN DETALLE CONFIGURADO'
         );
 
 
@@ -650,11 +859,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     select?.addEventListener(
         'change',
-        actualizarVehiculo
+        () => actualizarVehiculo(true)
     );
+    tipoCombustible?.addEventListener('change', () => {
+        actualizarNumeroSugerido();
+        actualizarUbicacion();
+    });
+    fechaEmision?.addEventListener('change', actualizarVistaPreviaPorAnio);
+
+    detalleAsignacion?.addEventListener('input', () => {
+        const opcion = select?.selectedOptions[0];
+        texto(
+            'vdetalle',
+            detalleAsignacion.value || opcion?.dataset.detalle || 'SIN DETALLE CONFIGURADO'
+        );
+    });
 
 
     actualizarVehiculo();
+    actualizarNumeroSugerido();
+    actualizarUbicacion();
+    actualizarVistaPreviaPorAnio();
 
 });
 

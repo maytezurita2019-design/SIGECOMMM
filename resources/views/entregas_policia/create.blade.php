@@ -180,6 +180,28 @@
     </div>
 
 
+    {{-- DISTRIBUCIÓN DE COMBUSTIBLE --}}
+    <div class="card border-success mb-3">
+        <div class="card-body">
+            <h5 class="text-success">Distribución de vales por combustible</h5>
+            <p class="text-muted small">La suma debe ser exactamente igual a la cantidad de vales del lote.</p>
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label for="cantidad_gasolina" class="form-label">Cantidad de vales de gasolina *</label>
+                    <input type="number" min="0" step="1" id="cantidad_gasolina" name="cantidad_gasolina"
+                        value="{{ old('cantidad_gasolina', 0) }}" class="form-control" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="cantidad_diesel" class="form-label">Cantidad de vales de diésel *</label>
+                    <input type="number" min="0" step="1" id="cantidad_diesel" name="cantidad_diesel"
+                        value="{{ old('cantidad_diesel', 0) }}" class="form-control" required>
+                </div>
+            </div>
+            <div id="avisoDistribucion" class="small mt-2" aria-live="polite"></div>
+            <div id="rangosDistribucion" class="small mt-2 text-muted"></div>
+        </div>
+    </div>
+
     {{-- RESUMEN DEL LOTE --}}
     <div
         id="resumenLote"
@@ -219,10 +241,12 @@
     <div>
 
         <button type="submit" class="btn btn-primary">
+            <i class="bi bi-clipboard-check me-1" aria-hidden="true"></i>
             Registrar entrega
         </button>
 
  <a href="{{ route('lotes-vales.index') }}" class="btn btn-secondary">
+    <i class="bi bi-arrow-left me-1" aria-hidden="true"></i>
     Volver
 </a>
     </div>
@@ -276,9 +300,32 @@ document.addEventListener('DOMContentLoaded', function () {
         resumen.classList.remove('d-none');
     }
 
+    const gas = document.getElementById('cantidad_gasolina');
+    const diesel = document.getElementById('cantidad_diesel');
+    const aviso = document.getElementById('avisoDistribucion');
+    const rangos = document.getElementById('rangosDistribucion');
+    const boton = document.querySelector('button[type="submit"]');
+    function validarDistribucion() {
+        const opcion = lote.selectedOptions[0];
+        const inicial = Number(opcion?.dataset.inicial);
+        const final = Number(opcion?.dataset.final);
+        const total = final - inicial + 1;
+        const g = Number(gas.value), d = Number(diesel.value);
+        const valido = !!opcion?.value && gas.value !== '' && diesel.value !== '' &&
+            Number.isInteger(g) && Number.isInteger(d) && g >= 0 && d >= 0 && g + d === total;
+        boton.disabled = !valido;
+        aviso.textContent = opcion?.value ? `Asignados: ${g + d} de ${total} vales. ${valido ? 'Distribución correcta.' : 'Ajuste las cantidades.'}` : 'Seleccione primero un lote.';
+        aviso.className = 'small mt-2 ' + (valido ? 'text-success' : 'text-danger');
+        rangos.textContent = valido ?
+            `Gasolina: ${g ? formatearNumero(inicial) + ' a ' + formatearNumero(inicial + g - 1) : 'ninguno'} · Diésel: ${d ? formatearNumero(inicial + g) + ' a ' + formatearNumero(final) : 'ninguno'}` : '';
+    }
+    gas.addEventListener('input', validarDistribucion);
+    diesel.addEventListener('input', validarDistribucion);
+    lote.addEventListener('change', validarDistribucion);
     lote.addEventListener('change', actualizarLote);
 
     actualizarLote();
+    validarDistribucion();
 
 });
 </script>

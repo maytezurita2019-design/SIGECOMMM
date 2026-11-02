@@ -10,6 +10,9 @@ use Illuminate\Validation\Rule;
 
 class VehiculoController extends Controller
 {
+    /**
+     * Normaliza los datos de texto antes de validarlos.
+     */
     private function normalizar(Request $request): void
     {
         $datos = [];
@@ -20,37 +23,49 @@ class VehiculoController extends Controller
             'tipo',
             'industria',
             'marca',
-            'color'
+            'color',
         ] as $campo) {
 
             if ($request->has($campo)) {
 
-$valor = preg_replace(
-    '/\s+/',
-    ' ',
-    trim((string) $request->input($campo))
-);
+                $valor = preg_replace(
+                    '/\s+/',
+                    ' ',
+                    trim((string) $request->input($campo))
+                );
 
                 $datos[$campo] = in_array(
                     $campo,
-                    ['codigo', 'placa']
+                    ['codigo', 'placa'],
+                    true
                 )
                     ? mb_strtoupper($valor)
                     : $valor;
             }
         }
 
+        if ($request->has('detalle_asignacion_predeterminado')) {
+            $datos['detalle_asignacion_predeterminado'] = trim(
+                (string) $request->input('detalle_asignacion_predeterminado')
+            );
+        }
+
         $request->merge($datos);
     }
 
+    /**
+     * Reglas de validación.
+     */
     private function reglas(?Vehiculo $vehiculo = null): array
     {
         return [
+
             'codigo' => [
                 'required',
                 'string',
                 'max:30',
                 'regex:/^[A-Z0-9][A-Z0-9._\/-]*$/',
+
                 Rule::unique('vehiculos', 'codigo')
                     ->ignore($vehiculo?->id),
             ],
@@ -60,6 +75,7 @@ $valor = preg_replace(
                 'string',
                 'max:20',
                 'regex:/^[A-Z0-9][A-Z0-9 .\/-]*$/',
+
                 Rule::unique('vehiculos', 'placa')
                     ->ignore($vehiculo?->id),
             ],
@@ -67,49 +83,58 @@ $valor = preg_replace(
             'tipo' => [
                 'nullable',
                 'string',
-                'max:100'
+                'max:100',
             ],
 
             'industria' => [
                 'nullable',
                 'string',
-                'max:100'
+                'max:100',
             ],
 
             'marca' => [
                 'nullable',
                 'string',
-                'max:100'
+                'max:100',
             ],
 
             'color' => [
                 'nullable',
                 'string',
-                'max:50'
+                'max:50',
+            ],
+
+            'detalle_asignacion_predeterminado' => [
+                'nullable',
+                'string',
             ],
 
             'unidad_id' => [
                 'required',
                 'integer',
-                'exists:unidades,id'
+                'exists:unidades,id',
             ],
 
             'apertura_programatica_id' => [
                 'required',
                 'integer',
-                'exists:aperturas_programaticas,id'
+                'exists:aperturas_programaticas,id',
             ],
 
             'estado' => [
                 'required',
-                'boolean'
+                'boolean',
             ],
         ];
     }
 
+    /**
+     * Mensajes personalizados de validación.
+     */
     private function mensajes(): array
     {
         return [
+
             'codigo.required' =>
                 'El código del vehículo es obligatorio.',
 
@@ -142,22 +167,28 @@ $valor = preg_replace(
         ];
     }
 
+    /**
+     * Listado de vehículos.
+     */
     public function index()
-{
-    $vehiculos = Vehiculo::with([
-        'unidad',
-        'aperturaProgramatica.fuenteFinanciamiento',
-        'aperturaProgramatica.organismoFinanciador',
-    ])
-       ->orderByDesc('id')
-        ->get();
+    {
+        $vehiculos = Vehiculo::with([
+            'unidad',
+            'aperturaProgramatica.fuenteFinanciamiento',
+            'aperturaProgramatica.organismoFinanciador',
+        ])
+            ->orderByDesc('id')
+            ->get();
 
-    return view(
-        'vehiculos.index',
-        compact('vehiculos')
-    );
-}
+        return view(
+            'vehiculos.index',
+            compact('vehiculos')
+        );
+    }
 
+    /**
+     * Formulario para registrar vehículo.
+     */
     public function create()
     {
         $unidades = Unidad::where('estado', true)
@@ -181,6 +212,9 @@ $valor = preg_replace(
         );
     }
 
+    /**
+     * Registrar vehículo.
+     */
     public function store(Request $request)
     {
         $this->normalizar($request);
@@ -200,6 +234,9 @@ $valor = preg_replace(
             );
     }
 
+    /**
+     * Mostrar vehículo.
+     */
     public function show(Vehiculo $vehiculo)
     {
         $vehiculo->load([
@@ -214,6 +251,9 @@ $valor = preg_replace(
         );
     }
 
+    /**
+     * Formulario para editar vehículo.
+     */
     public function edit(Vehiculo $vehiculo)
     {
         $unidades = Unidad::where('estado', true)
@@ -249,6 +289,9 @@ $valor = preg_replace(
         );
     }
 
+    /**
+     * Actualizar vehículo.
+     */
     public function update(
         Request $request,
         Vehiculo $vehiculo
@@ -270,6 +313,9 @@ $valor = preg_replace(
             );
     }
 
+    /**
+     * Eliminar vehículo.
+     */
     public function destroy(Vehiculo $vehiculo)
     {
         if ($vehiculo->valesCombustible()->exists()) {

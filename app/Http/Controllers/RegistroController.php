@@ -27,7 +27,7 @@ class RegistroController extends Controller
         ]);
 
         // El usuario que se registra NO será administrador.
-        $rol = Rol::where('nombre', 'Usuario')->first();
+        $rol = Rol::whereRaw('LOWER(nombre) = ?', ['usuario'])->first();
 
         if (!$rol) {
             return back()
