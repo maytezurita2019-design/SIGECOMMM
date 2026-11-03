@@ -5,12 +5,19 @@ namespace App\Http\Controllers;
 use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-
+use Illuminate\Support\Facades\Log;
 class AutenticacionController extends Controller
 {
     public function mostrarLogin()
     {
-        if (Auth::check()) {
+        Log::info('SIGECOM_DIAG_RETORNO', [
+        'autenticado' => Auth::check(),
+        'usuario_id' => Auth::id(),
+        'sesion' => substr(hash('sha256', request()->session()->getId()), 0, 12),
+        'driver' => config('session.driver'),
+    ]);
+
+    if (Auth::check()) {
             return redirect()->route('dashboard');
         }
 
@@ -49,9 +56,16 @@ class AutenticacionController extends Controller
             'estado' => true,
         ], $recordarme)) {
 
-            $request->session()->regenerate();
+           $request->session()->regenerate();
 
-            return redirect()->route('dashboard');
+Log::info('SIGECOM_DIAG_LOGIN', [
+    'autenticado' => Auth::check(),
+    'usuario_id' => Auth::id(),
+    'sesion' => substr(hash('sha256', $request->session()->getId()), 0, 12),
+    'driver' => config('session.driver'),
+]);
+
+return redirect()->route('dashboard');
         }
 
         return back()
